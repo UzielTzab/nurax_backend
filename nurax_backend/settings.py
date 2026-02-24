@@ -132,7 +132,7 @@ SIMPLE_JWT = {
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
-    'https://tu-dominio.com',
+    'https://nurax.netlify.app',
 ]
 
 CLOUDINARY_STORAGE = {

@@ -1,4 +1,5 @@
 from rest_framework import serializers
+import cloudinary.uploader
 from .models import User, Client, Product, Category, Supplier, Sale, SaleItem
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -14,19 +15,30 @@ class SupplierSerializer(serializers.ModelSerializer):
 class ProductSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     status        = serializers.ReadOnlyField()
-    image_url     = serializers.SerializerMethodField()
+    # image_file es virtual: lo usamos para atrapar el archivo en el form-data del frontend
+    image_file    = serializers.ImageField(write_only=True, required=False)
     
     class Meta:
         model = Product
         fields = ['id', 'name', 'category', 'category_name', 'supplier',
-                  'sku', 'stock', 'price', 'image', 'image_url',
+                  'sku', 'stock', 'price', 'image_url', 'image_file',
                   'status', 'created_at', 'updated_at']
                   
-    def get_image_url(self, obj):
-        # Prioridad: campo Cloudinary → campo URL importado desde Excel
-        if obj.image:
-            return obj.image.url
-        return obj.image_url or ''
+    def create(self, validated_data):
+        image_file = validated_data.pop('image_file', None)
+        if image_file:
+            # Subimos el archivo capturado a Cloudinary
+            upload_data = cloudinary.uploader.upload(image_file, folder="products")
+            # Guardamos la URL segura retornada en nuestro campo string
+            validated_data['image_url'] = upload_data.get('secure_url')
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        image_file = validated_data.pop('image_file', None)
+        if image_file:
+            upload_data = cloudinary.uploader.upload(image_file, folder="products")
+            validated_data['image_url'] = upload_data.get('secure_url')
+        return super().update(instance, validated_data)
 
 class SaleItemSerializer(serializers.ModelSerializer):
     subtotal = serializers.ReadOnlyField()

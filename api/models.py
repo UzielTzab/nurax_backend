@@ -62,9 +62,8 @@ class Product(models.Model):
     sku         = models.CharField(max_length=50, unique=True)
     stock       = models.PositiveIntegerField(default=0)
     price       = models.DecimalField(max_digits=12, decimal_places=2)
-    # Cloudinary guarda automáticamente la URL pública
-    image       = models.ImageField(upload_to='products/', blank=True, null=True)
-    image_url   = models.URLField(blank=True)   # Para importación desde Excel
+    # Almacenamos únicamente la URL de la imagen que nos devuelva Cloudinary en formato string
+    image_url   = models.URLField(max_length=800, blank=True, null=True)
     created_at  = models.DateTimeField(auto_now_add=True)
     updated_at  = models.DateTimeField(auto_now=True)
     

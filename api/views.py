@@ -40,6 +40,31 @@ class SaleViewSet(viewsets.ModelViewSet):
         # Asignar automáticamente el usuario logueado en base al token de la petición
         serializer.save(user=self.request.user)
 
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        sale = self.get_object()
+        
+        # 1. Validar que la venta no esté ya cancelada
+        if sale.status == Sale.Status.CANCELLED:
+            return Response(
+                {'detail': 'Esta venta ya se encuentra cancelada.'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # 2. Restaurar el stock de cada producto vendido
+        for item in sale.items.all():
+            if item.product:
+                # Opcional: Podrías usar F() expressions de Django para evitar carrera de datos, 
+                # pero para esta escala, sumarlo directo funciona excelente.
+                item.product.stock += item.quantity
+                item.product.save()
+                
+        # 3. Cambiar el estado de la venta y guardar
+        sale.status = Sale.Status.CANCELLED
+        sale.save()
+        
+        return Response({'status': 'Venta cancelada exitosamente y stock restaurado'})
+
 class ClientViewSet(viewsets.ModelViewSet):
     queryset         = Client.objects.all()
     serializer_class = ClientSerializer

@@ -42,6 +42,7 @@ class ProductSerializer(serializers.ModelSerializer):
 
 class SaleItemSerializer(serializers.ModelSerializer):
     subtotal = serializers.ReadOnlyField()
+    product_name = serializers.CharField(required=False, allow_blank=True, default='')
     
     class Meta:
         model  = SaleItem
@@ -49,6 +50,7 @@ class SaleItemSerializer(serializers.ModelSerializer):
 
 class SaleSerializer(serializers.ModelSerializer):
     items = SaleItemSerializer(many=True)
+    user = serializers.PrimaryKeyRelatedField(read_only=True)
     
     class Meta:
         model  = Sale
@@ -59,9 +61,10 @@ class SaleSerializer(serializers.ModelSerializer):
         sale = Sale.objects.create(**validated_data)
         for item in items_data:
             product = item.get('product')
+            prod_name_fallback = item.pop('product_name', '')
             SaleItem.objects.create(
                 sale=sale,
-                product_name=product.name if product else item.get('product_name', ''),
+                product_name=product.name if product else prod_name_fallback,
                 **item
             )
             # Descuentar stock automáticamente

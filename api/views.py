@@ -36,6 +36,10 @@ class SaleViewSet(viewsets.ModelViewSet):
             qs = qs.filter(user=self.request.user)
         return qs
 
+    def perform_create(self, serializer):
+        # Asignar automáticamente el usuario logueado en base al token de la petición
+        serializer.save(user=self.request.user)
+
 class ClientViewSet(viewsets.ModelViewSet):
     queryset         = Client.objects.all()
     serializer_class = ClientSerializer

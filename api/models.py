@@ -7,9 +7,11 @@ class User(AbstractUser):
         ADMIN   = 'admin',   'Administrador'
         CLIENTE = 'cliente', 'Cliente'
     
-    role  = models.CharField(max_length=10, choices=Role.choices, default=Role.CLIENTE)
-    name  = models.CharField(max_length=150)
-    email = models.EmailField(unique=True)
+    role       = models.CharField(max_length=10, choices=Role.choices, default=Role.CLIENTE)
+    name       = models.CharField(max_length=150)
+    email      = models.EmailField(unique=True)
+    # URL de la foto de perfil almacenada en Cloudinary (solo el string, nunca el archivo)
+    avatar_url = models.URLField(max_length=800, blank=True, null=True)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
@@ -102,3 +104,26 @@ class SaleItem(models.Model):
     
     @property
     def subtotal(self): return self.quantity * self.unit_price
+
+
+# ─── CONFIGURACIÓN DEL NEGOCIO (singleton: solo un registro en el sistema) ────
+class StoreProfile(models.Model):
+    store_name       = models.CharField(max_length=200, default='Mi Tienda')
+    currency_symbol  = models.CharField(max_length=10, default='$')
+    address          = models.CharField(max_length=300, blank=True)
+    phone            = models.CharField(max_length=30, blank=True)
+    ticket_message   = models.TextField(blank=True)
+    # Logo subido a Cloudinary, guardado como URL
+    logo_url         = models.URLField(max_length=800, blank=True, null=True)
+    updated_at       = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Configuración del Negocio'
+
+    def __str__(self): return self.store_name
+
+    @classmethod
+    def get_solo(cls):
+        """Retorna siempre el único registro, creándolo si no existe."""
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj

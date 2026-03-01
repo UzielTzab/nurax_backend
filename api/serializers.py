@@ -1,6 +1,6 @@
 from rest_framework import serializers
 import cloudinary.uploader
-from .models import User, Client, Product, Category, Supplier, Sale, SaleItem
+from .models import User, Client, Product, Category, Supplier, Sale, SaleItem, StoreProfile
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -79,26 +79,67 @@ class ClientSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'email', 'company', 'plan', 'active', 'created_at', 'avatar_color']
 
 class UserSerializer(serializers.ModelSerializer):
+    # Campo virtual de solo escritura para recibir el archivo de imagen del frontend
+    avatar_file = serializers.ImageField(write_only=True, required=False)
+
     class Meta:
         model  = User
-        fields = ['id', 'username', 'password', 'name', 'email', 'role']
+        fields = ['id', 'username', 'password', 'name', 'email', 'role', 'avatar_url', 'avatar_file']
         extra_kwargs = {
-            'password': {'write_only': True},
-            'username': {'required': False, 'allow_blank': True}
+            'password':   {'write_only': True},
+            'username':   {'required': False, 'allow_blank': True},
+            'avatar_url': {'read_only': True},  # Solo el backend puede escribir este campo
         }
 
+    def _handle_avatar(self, validated_data):
+        """Sube la imagen a Cloudinary y retorna la secure_url si se recibió un archivo."""
+        avatar_file = validated_data.pop('avatar_file', None)
+        if avatar_file:
+            result = cloudinary.uploader.upload(
+                avatar_file,
+                folder='avatars',
+                transformation=[{'width': 400, 'height': 400, 'crop': 'fill', 'gravity': 'face'}]
+            )
+            validated_data['avatar_url'] = result.get('secure_url')
+        return validated_data
+
     def create(self, validated_data):
-        # Generar un username basado en el email si no se manda uno
-        email = validated_data['email']
-        username = validated_data.get('username')
-        if not username:
-            username = email.split('@')[0]
-            
-        user = User.objects.create_user(
+        validated_data = self._handle_avatar(validated_data)
+        email    = validated_data['email']
+        username = validated_data.pop('username', None) or email.split('@')[0]
+        return User.objects.create_user(
             username=username,
             email=email,
-            password=validated_data['password'],
+            password=validated_data.pop('password'),
             name=validated_data.get('name', ''),
-            role=validated_data.get('role', 'cliente')
+            role=validated_data.get('role', 'cliente'),
+            avatar_url=validated_data.get('avatar_url'),
         )
-        return user
+
+    def update(self, instance, validated_data):
+        validated_data = self._handle_avatar(validated_data)
+        # Manejar el password de manera segura si se manda en una edición
+        password = validated_data.pop('password', None)
+        if password:
+            instance.set_password(password)
+        return super().update(instance, validated_data)
+
+
+class StoreProfileSerializer(serializers.ModelSerializer):
+    # Campo virtual para recibir el archivo del logo desde el frontend
+    logo_file = serializers.ImageField(write_only=True, required=False)
+
+    class Meta:
+        model  = StoreProfile
+        fields = ['id', 'store_name', 'currency_symbol', 'address',
+                  'phone', 'ticket_message', 'logo_url', 'logo_file', 'updated_at']
+        extra_kwargs = {
+            'logo_url': {'read_only': True},  # El backend controla este campo
+        }
+
+    def update(self, instance, validated_data):
+        logo_file = validated_data.pop('logo_file', None)
+        if logo_file:
+            result = cloudinary.uploader.upload(logo_file, folder='logos')
+            validated_data['logo_url'] = result.get('secure_url')
+        return super().update(instance, validated_data)

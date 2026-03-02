@@ -84,6 +84,8 @@ class Sale(models.Model):
         COMPLETED = 'completed', 'Completada'
         PENDING   = 'pending',   'Pendiente'
         CANCELLED = 'cancelled', 'Cancelada'
+        CREDIT    = 'credit',    'Crédito'
+        LAYAWAY   = 'layaway',   'Apartado'
         
     transaction_id = models.CharField(max_length=20, unique=True)
     user           = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
@@ -104,6 +106,66 @@ class SaleItem(models.Model):
     
     @property
     def subtotal(self): return self.quantity * self.unit_price
+
+
+# ─── PAGOS / ABONOS A VENTAS (CRÉDITO Y APARTADO) ─────────────────────────────
+class SalePayment(models.Model):
+    sale       = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name='payments')
+    amount     = models.DecimalField(max_digits=12, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    user       = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+
+    def __str__(self): return f"Abono ${self.amount} a {self.sale.transaction_id}"
+
+
+# ─── KÁRDEX / MOVIMIENTOS DE INVENTARIO ───────────────────────────────────────
+class InventoryTransaction(models.Model):
+    class TransactionType(models.TextChoices):
+        IN         = 'in',         'Entrada (Compra/Proveedor)'
+        OUT        = 'out',        'Salida (Venta/Manual)'
+        ADJUSTMENT = 'adjustment', 'Ajuste de Inventario'
+        WASTE      = 'waste',      'Merma / Dañado'
+
+    product          = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='transactions')
+    transaction_type = models.CharField(max_length=15, choices=TransactionType.choices)
+    quantity         = models.PositiveIntegerField()
+    reason           = models.CharField(max_length=255, blank=True)
+    user             = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    created_at       = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self): return f"{self.transaction_type} - {self.quantity} de {self.product.name}"
+
+
+# ─── GASTOS / EGRESOS ─────────────────────────────────────────────────────────
+class Expense(models.Model):
+    class Category(models.TextChoices):
+        SERVICIOS   = 'servicios',   'Servicios (Luz, Agua, Internet)'
+        NOMINA      = 'nomina',      'Nómina / Sueldos'
+        PROVEEDORES = 'proveedores', 'Pago a Proveedores'
+        VARIOS      = 'varios',      'Gastos Varios'
+
+    amount      = models.DecimalField(max_digits=12, decimal_places=2)
+    category    = models.CharField(max_length=20, choices=Category.choices)
+    description = models.CharField(max_length=255)
+    # URL del comprobante físico (ticket de la luz, etc)
+    receipt_url = models.URLField(max_length=800, blank=True, null=True)
+    user        = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    date        = models.DateField(auto_now_add=True)
+
+    def __str__(self): return f"{self.category} - ${self.amount}"
+
+
+# ─── CORTE DE CAJA / TURNOS ───────────────────────────────────────────────────
+class CashShift(models.Model):
+    user          = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    opened_at     = models.DateTimeField(auto_now_add=True)
+    closed_at     = models.DateTimeField(null=True, blank=True)
+    starting_cash = models.DecimalField(max_digits=12, decimal_places=2)
+    expected_cash = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    actual_cash   = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    difference    = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+
+    def __str__(self): return f"Turno de {self.user.name if self.user else 'N/A'} - {self.opened_at.strftime('%Y-%m-%d')}"
 
 
 # ─── CONFIGURACIÓN DEL NEGOCIO (singleton: solo un registro en el sistema) ────

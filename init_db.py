@@ -6,13 +6,33 @@ django.setup()
 
 from api.models import Category, User
 
-# Create categories
-for c in ['Audio', 'Laptop', 'Smartphone', 'Wearable', 'Photography', 'Gaming', 'Accessories']:
-    Category.objects.get_or_create(name=c)
+print("--- Iniciando poblado de base de datos de producción ---")
 
-# Create superuser
-if not User.objects.filter(username='admin').exists():
-    User.objects.create_superuser('admin', 'admin@example.com', 'admin123')
-    print("Superuser 'admin' created with password 'admin123'")
+# 1. Crear las Categorías Base Exactas
+categorias = [
+    'Laptop', 'Smartphone', 'Audio', 'Wearable', 
+    'Fotografía', 'Gaming', 'Accesorios', 'Otros'
+]
+for c in categorias:
+    obj, created = Category.objects.get_or_create(name=c)
+    status = "Creada" if created else "Ya existía"
+    print(f"[{status}] Categoría: {c}")
+
+# 2. Crear Superusuario Maestro de Producción
+email_admin = 'uzieltzab8@gmail.com'
+password_admin = '2jusni!+1'
+
+if not User.objects.filter(email=email_admin).exists():
+    User.objects.create_superuser(
+        username='admin_produccion', 
+        email=email_admin, 
+        password=password_admin,
+        name='Administrador Maestro',
+        role='admin',
+        is_active=True
+    )
+    print(f"[Creado] Superusuario maestro '{email_admin}' creado con éxito.")
 else:
-    print("Superuser 'admin' already exists")
+    print(f"[Aviso] El superusuario '{email_admin}' ya existe en la base de datos.")
+
+print("--- Finalizado ---")

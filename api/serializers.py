@@ -1,6 +1,9 @@
 from rest_framework import serializers
 import cloudinary.uploader
-from .models import User, Client, Product, Category, Supplier, Sale, SaleItem, StoreProfile
+from .models import (
+    User, Client, Product, Category, Supplier, Sale, SaleItem, StoreProfile,
+    InventoryTransaction, Expense, CashShift, SalePayment
+)
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -48,13 +51,21 @@ class SaleItemSerializer(serializers.ModelSerializer):
         model  = SaleItem
         fields = ['id', 'product', 'product_name', 'quantity', 'unit_price', 'subtotal']
 
-class SaleSerializer(serializers.ModelSerializer):
-    items = SaleItemSerializer(many=True)
+class SalePaymentSerializer(serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = SalePayment
+        fields = ['id', 'amount', 'created_at', 'user']
+
+class SaleSerializer(serializers.ModelSerializer):
+    items    = SaleItemSerializer(many=True)
+    payments = SalePaymentSerializer(many=True, read_only=True)
+    user     = serializers.PrimaryKeyRelatedField(read_only=True)
     
     class Meta:
         model  = Sale
-        fields = ['id', 'transaction_id', 'user', 'status', 'total', 'items', 'created_at']
+        fields = ['id', 'transaction_id', 'user', 'status', 'total', 'items', 'payments', 'created_at']
         
     def create(self, validated_data):
         items_data = validated_data.pop('items')
@@ -67,10 +78,18 @@ class SaleSerializer(serializers.ModelSerializer):
                 product_name=product.name if product else prod_name_fallback,
                 **item
             )
-            # Descuentar stock automáticamente
+            # Descuentar stock automáticamente y registrar en Kárdex
             if product:
                 product.stock = max(0, product.stock - item['quantity'])
                 product.save()
+                
+                InventoryTransaction.objects.create(
+                    product=product,
+                    transaction_type=InventoryTransaction.TransactionType.OUT,
+                    quantity=item['quantity'],
+                    reason=f'Venta {sale.transaction_id}',
+                    user=validated_data.get('user')
+                )
         return sale
 
 class ClientSerializer(serializers.ModelSerializer):
@@ -84,11 +103,13 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = User
-        fields = ['id', 'username', 'password', 'name', 'email', 'role', 'avatar_url', 'avatar_file']
+        fields = ['id', 'username', 'password', 'name', 'email', 'role', 'is_active', 'date_joined', 'avatar_url', 'avatar_file']
         extra_kwargs = {
-            'password':   {'write_only': True},
-            'username':   {'required': False, 'allow_blank': True},
-            'avatar_url': {'read_only': True},  # Solo el backend puede escribir este campo
+            'password':    {'write_only': True, 'required': False},
+            'username':    {'required': False, 'allow_blank': True},
+            'avatar_url':  {'read_only': True},  # Solo el backend puede escribir este campo
+            'is_active':   {'read_only': True},
+            'date_joined': {'read_only': True},
         }
 
     def _handle_avatar(self, validated_data):
@@ -107,10 +128,14 @@ class UserSerializer(serializers.ModelSerializer):
         validated_data = self._handle_avatar(validated_data)
         email    = validated_data['email']
         username = validated_data.pop('username', None) or email.split('@')[0]
+        # Si no se provee contraseña (o se manda un string vacío) asignar una por defecto
+        pwd = validated_data.pop('password', None)
+        password = pwd if pwd else 'nurax123'
+        
         return User.objects.create_user(
             username=username,
             email=email,
-            password=validated_data.pop('password'),
+            password=password,
             name=validated_data.get('name', ''),
             role=validated_data.get('role', 'cliente'),
             avatar_url=validated_data.get('avatar_url'),
@@ -143,3 +168,50 @@ class StoreProfileSerializer(serializers.ModelSerializer):
             result = cloudinary.uploader.upload(logo_file, folder='logos')
             validated_data['logo_url'] = result.get('secure_url')
         return super().update(instance, validated_data)
+
+
+class InventoryTransactionSerializer(serializers.ModelSerializer):
+    user = serializers.PrimaryKeyRelatedField(read_only=True)
+    product_name = serializers.CharField(source='product.name', read_only=True)
+
+    class Meta:
+        model = InventoryTransaction
+        fields = ['id', 'product', 'product_name', 'transaction_type', 'quantity', 'reason', 'user', 'created_at']
+
+
+class ExpenseSerializer(serializers.ModelSerializer):
+    user = serializers.PrimaryKeyRelatedField(read_only=True)
+    # Útil para recibir un archivo de comprobante opcional
+    receipt_file = serializers.FileField(write_only=True, required=False)
+
+    class Meta:
+        model = Expense
+        fields = ['id', 'amount', 'category', 'description', 'receipt_url', 'receipt_file', 'user', 'date']
+        extra_kwargs = {
+            'receipt_url': {'read_only': True}
+        }
+
+    def create(self, validated_data):
+        receipt_file = validated_data.pop('receipt_file', None)
+        if receipt_file:
+            result = cloudinary.uploader.upload(receipt_file, folder="expenses")
+            validated_data['receipt_url'] = result.get('secure_url')
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        receipt_file = validated_data.pop('receipt_file', None)
+        if receipt_file:
+            result = cloudinary.uploader.upload(receipt_file, folder="expenses")
+            validated_data['receipt_url'] = result.get('secure_url')
+        return super().update(instance, validated_data)
+
+
+class CashShiftSerializer(serializers.ModelSerializer):
+    user = serializers.PrimaryKeyRelatedField(read_only=True)
+    user_name = serializers.CharField(source='user.name', read_only=True)
+
+    class Meta:
+        model = CashShift
+        fields = ['id', 'user', 'user_name', 'opened_at', 'closed_at', 
+                  'starting_cash', 'expected_cash', 'actual_cash', 'difference']
+

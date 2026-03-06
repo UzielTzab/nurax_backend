@@ -13,11 +13,42 @@ class IsAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == 'admin'
 
+import pusher
+from django.conf import settings
+
+def get_pusher_client():
+    if not getattr(settings, 'PUSHER_APP_ID', None):
+        print("DEBUG: PUSHER_APP_ID no encontrado en settings.")
+        return None
+    try:
+        p = pusher.Pusher(
+            app_id=settings.PUSHER_APP_ID,
+            key=settings.PUSHER_KEY,
+            secret=settings.PUSHER_SECRET,
+            cluster=settings.PUSHER_CLUSTER,
+            ssl=True
+        )
+        # print("DEBUG: Pusher client inicializado correctamente.")
+        return p
+    except Exception as e:
+        print(f"Error initializing Pusher: {e}")
+        return None
+
 class ProductViewSet(viewsets.ModelViewSet):
     queryset         = Product.objects.select_related('category', 'supplier').all()
     serializer_class = ProductSerializer
     filter_backends  = [DjangoFilterBackend]
     filterset_fields = ['category', 'sku']
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.request.user.role != 'admin':
+            qs = qs.filter(user=self.request.user)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
     
     @action(detail=False, methods=['get'])
     def low_stock(self, request):
@@ -28,6 +59,46 @@ class ProductViewSet(viewsets.ModelViewSet):
     def out_of_stock(self, request):
         qs = self.get_queryset().filter(stock=0)
         return Response(self.get_serializer(qs, many=True).data)
+
+    @action(detail=False, methods=['post'])
+    def scan(self, request):
+        """
+        Endpoint que recibe un código de barras (sku) desde el escáner móvil.
+        Emite un evento a Pusher y retorna el producto.
+        """
+        sku = request.data.get('sku')
+        if not sku:
+            return Response({'detail': 'Se requiere el sku del producto para escanear.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Buscamos el producto por SKU. (Dependiendo de tu BD si usas un campo 'barcode' distinto, cámbialo aquí)
+            product = self.get_queryset().filter(sku=sku).first()
+            if not product:
+                return Response({'detail': f'Producto con SKU {sku} no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+            serializer = self.get_serializer(product)
+            product_data = serializer.data
+
+            # Magia del Tiempo Real: Enviar evento al canal único del usuario
+            client = get_pusher_client()
+            if client:
+                # Usamos un canal público ofuscado (usando user ID y quizá algún hash).
+                # Para un MVP, el canal del usuario suele bastar
+                channel_name = f"pos-user-{request.user.id}"
+                event_name = "PRODUCT_SCANNED"
+                
+                # Emitimos
+                client.trigger(channel_name, event_name, {
+                    'product': product_data
+                })
+
+            return Response({
+                'detail': 'Producto escaneado y enviado al POS en tiempo real',
+                'product': product_data
+            })
+            
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def perform_destroy(self, instance):
         # Borrar imagen de Cloudinary para no dejar basura en la nube
@@ -68,7 +139,21 @@ class SaleViewSet(viewsets.ModelViewSet):
                 {'detail': 'Debes abrir un turno (caja) antes de poder registrar una venta.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        return super().create(request, *args, **kwargs)
+        response = super().create(request, *args, **kwargs)
+        
+        # Magia Pusher: Avisamos que hay una venta nueva (actualización de inventario)
+        if response.status_code == status.HTTP_201_CREATED:
+            client = get_pusher_client()
+            if client:
+                channel = f"pos-user-{request.user.id}"
+                print(f"DEBUG: Enviando INVENTORY_UPDATED al canal {channel}")
+                client.trigger(channel, "INVENTORY_UPDATED", {
+                    'message': 'update'
+                })
+            else:
+                print("DEBUG: Pusher client no inicializado en create sale.")
+                
+        return response
 
     def perform_create(self, serializer):
         # Asignar automáticamente el usuario logueado en base al token de la petición
@@ -105,6 +190,17 @@ class SaleViewSet(viewsets.ModelViewSet):
         sale.status = Sale.Status.CANCELLED
         sale.save()
         
+        # Magia Pusher: Avisamos que la venta se canceló
+        client = get_pusher_client()
+        if client:
+            channel = f"pos-user-{request.user.id}"
+            print(f"DEBUG: Enviando INVENTORY_UPDATED al canal {channel} por cancelacion.")
+            client.trigger(channel, "INVENTORY_UPDATED", {
+                'message': 'update'
+            })
+        else:
+            print("DEBUG: Pusher client no inicializado en cancel sale.")
+        
         return Response({'status': 'Venta cancelada exitosamente y stock restaurado'})
 
 class ClientViewSet(viewsets.ModelViewSet):
@@ -126,6 +222,16 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 class SupplierViewSet(viewsets.ModelViewSet):
     queryset         = Supplier.objects.all()
     serializer_class = SupplierSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.request.user.role != 'admin':
+            qs = qs.filter(user=self.request.user)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
@@ -193,19 +299,19 @@ class UserViewSet(viewsets.ModelViewSet):
 
 class StoreProfileViewSet(viewsets.ViewSet):
     """
-    Singleton: solo hay UN perfil de negocio en todo el sistema.
-    GET  /api/store/  → lee la configuración actual
+    Configuración del negocio por usuario.
+    GET  /api/store/  → lee la configuración del usuario conectado
     PATCH /api/store/ → guarda cambios (multipart si hay logo, json si no)
     """
     permission_classes = [permissions.IsAuthenticated]
 
     def list(self, request):
-        profile = StoreProfile.get_solo()
+        profile, created = StoreProfile.objects.get_or_create(user=request.user)
         serializer = StoreProfileSerializer(profile)
         return Response(serializer.data)
 
     def partial_update(self, request, pk=None):
-        profile = StoreProfile.get_solo()
+        profile, created = StoreProfile.objects.get_or_create(user=request.user)
         serializer = StoreProfileSerializer(profile, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -216,6 +322,12 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     queryset = Expense.objects.all().order_by('-date')
     serializer_class = ExpenseSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.request.user.role != 'admin':
+            qs = qs.filter(user=self.request.user)
+        return qs
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -277,6 +389,9 @@ class InventoryTransactionViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        if self.request.user.role != 'admin':
+            qs = qs.filter(user=self.request.user)
+        
         product_id = self.request.query_params.get('product')
         if product_id:
             qs = qs.filter(product_id=product_id)
@@ -293,9 +408,12 @@ class InventoryTransactionViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({'detail': 'product, quantity y transaction_type son requeridos.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            product = Product.objects.get(id=product_id)
+            if request.user.role == 'admin':
+                product = Product.objects.get(id=product_id)
+            else:
+                product = Product.objects.get(id=product_id, user=request.user)
         except Product.DoesNotExist:
-            return Response({'detail': 'Producto no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'detail': 'Producto no encontrado o no tienes permisos.'}, status=status.HTTP_404_NOT_FOUND)
 
         try:
             quantity = int(quantity)
@@ -333,6 +451,14 @@ class InventoryTransactionViewSet(viewsets.ReadOnlyModelViewSet):
             reason=reason,
             user=request.user
         )
+        
+        # Magia Pusher: Avisamos movimiento manual de inventario
+        client = get_pusher_client()
+        if client:
+            client.trigger(f"pos-user-{request.user.id}", "INVENTORY_UPDATED", {
+                'message': 'update'
+            })
+            
         return Response(InventoryTransactionSerializer(txn).data, status=status.HTTP_201_CREATED)
 
 
@@ -340,6 +466,12 @@ class SalePaymentViewSet(viewsets.ModelViewSet):
     queryset = SalePayment.objects.all().order_by('-created_at')
     serializer_class = SalePaymentSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.request.user.role != 'admin':
+            qs = qs.filter(user=self.request.user)
+        return qs
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)

@@ -49,6 +49,15 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+        client = get_pusher_client()
+        if client:
+            client.trigger(f"pos-user-{self.request.user.id}", "INVENTORY_UPDATED", {'message': 'update'})
+            
+    def perform_update(self, serializer):
+        serializer.save()
+        client = get_pusher_client()
+        if client:
+            client.trigger(f"pos-user-{self.request.user.id}", "INVENTORY_UPDATED", {'message': 'update'})
     
     @action(detail=False, methods=['get'])
     def low_stock(self, request):
@@ -121,6 +130,11 @@ class ProductViewSet(viewsets.ModelViewSet):
                 
         # Finalmente, borrar el registro de la base de datos local
         instance.delete()
+        
+        # Emitir evento a Pusher de eliminación
+        client = get_pusher_client()
+        if client:
+            client.trigger(f"pos-user-{self.request.user.id}", "INVENTORY_UPDATED", {'message': 'update'})
 
 class SaleViewSet(viewsets.ModelViewSet):
     queryset         = Sale.objects.prefetch_related('items').all()

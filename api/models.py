@@ -47,6 +47,7 @@ class Category(models.Model):
 
 # ─── PROVEEDOR ────────────────────────────────────────────────────────────────
 class Supplier(models.Model):
+    user        = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     name        = models.CharField(max_length=200)
     email       = models.EmailField(blank=True)
     phone       = models.CharField(max_length=20, blank=True)
@@ -58,10 +59,11 @@ class Supplier(models.Model):
 
 # ─── PRODUCTO ─────────────────────────────────────────────────────────────────
 class Product(models.Model):
+    user        = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     name        = models.CharField(max_length=250)
     category    = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True)
     supplier    = models.ForeignKey(Supplier, on_delete=models.SET_NULL, null=True, blank=True)
-    sku         = models.CharField(max_length=50, unique=True)
+    sku         = models.CharField(max_length=50)
     stock       = models.PositiveIntegerField(default=0)
     price       = models.DecimalField(max_digits=12, decimal_places=2)
     # Almacenamos únicamente la URL de la imagen que nos devuelva Cloudinary en formato string
@@ -168,8 +170,9 @@ class CashShift(models.Model):
     def __str__(self): return f"Turno de {self.user.name if self.user else 'N/A'} - {self.opened_at.strftime('%Y-%m-%d')}"
 
 
-# ─── CONFIGURACIÓN DEL NEGOCIO (singleton: solo un registro en el sistema) ────
+# ─── CONFIGURACIÓN DEL NEGOCIO (por usuario) ────────────────────────────────────
 class StoreProfile(models.Model):
+    user             = models.OneToOneField(User, on_delete=models.CASCADE, related_name='store_profile', null=True)
     store_name       = models.CharField(max_length=200, default='Mi Tienda')
     currency_symbol  = models.CharField(max_length=10, default='$')
     address          = models.CharField(max_length=300, blank=True)
@@ -182,10 +185,4 @@ class StoreProfile(models.Model):
     class Meta:
         verbose_name = 'Configuración del Negocio'
 
-    def __str__(self): return self.store_name
-
-    @classmethod
-    def get_solo(cls):
-        """Retorna siempre el único registro, creándolo si no existe."""
-        obj, _ = cls.objects.get_or_create(pk=1)
-        return obj
+    def __str__(self): return f"{self.store_name} ({self.user.name if self.user else 'Sin user'})"

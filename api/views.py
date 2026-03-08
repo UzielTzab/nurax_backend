@@ -5,7 +5,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import (
     Product, Category, Supplier, Sale, Client, User, StoreProfile,
-    InventoryTransaction, Expense, CashShift, SalePayment
+    InventoryTransaction, Expense, CashShift, SalePayment, ActiveSessionCart
 )
 from .serializers import *
 
@@ -135,6 +135,39 @@ class ProductViewSet(viewsets.ModelViewSet):
         client = get_pusher_client()
         if client:
             client.trigger(f"pos-user-{self.request.user.id}", "INVENTORY_UPDATED", {'message': 'update'})
+
+    @action(detail=False, methods=['post'], url_path='sync-cart')
+    def sync_cart(self, request):
+        """
+        Recibe el estado completo del carrito desde el frontend y lo difunde a través de Pusher
+        al resto de sesiones del usuario. También persiste el carrito en la base de datos.
+        """
+        cart_data = request.data.get('cart', [])
+        device_id = request.data.get('device_id', 'unknown')
+        
+        # Persistencia en BD
+        cart_session, created = ActiveSessionCart.objects.get_or_create(user=request.user)
+        cart_session.cart_data = cart_data
+        cart_session.save()
+        
+        # Disparar evento a Pusher
+        client = get_pusher_client()
+        if client:
+            channel_name = f"pos-user-{request.user.id}"
+            client.trigger(channel_name, "CART_UPDATED", {
+                'cart': cart_data,
+                'device_id': device_id
+            })
+            
+        return Response({"detail": "Carrito sincronizado vía Pusher"})
+        
+    @action(detail=False, methods=['get'], url_path='my-cart')
+    def my_cart(self, request):
+        """
+        Devuelve el estado guardado del carrito para la sesión del usuario.
+        """
+        cart_session, created = ActiveSessionCart.objects.get_or_create(user=request.user)
+        return Response({'cart': cart_session.cart_data})
 
 class SaleViewSet(viewsets.ModelViewSet):
     queryset         = Sale.objects.prefetch_related('items').all()

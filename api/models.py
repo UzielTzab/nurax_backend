@@ -186,3 +186,12 @@ class StoreProfile(models.Model):
         verbose_name = 'Configuración del Negocio'
 
     def __str__(self): return f"{self.store_name} ({self.user.name if self.user else 'Sin user'})"
+
+
+# ─── CARRITO SESIÓN ACTIVA ───────────────────────────────────────────────────
+class ActiveSessionCart(models.Model):
+    user       = models.OneToOneField(User, on_delete=models.CASCADE, related_name='active_cart')
+    cart_data  = models.JSONField(default=list)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self): return f"Carrito de {self.user.email}"

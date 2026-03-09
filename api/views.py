@@ -1,7 +1,9 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
+from django_filters import FilterSet, CharFilter, NumberFilter, ChoiceFilter
 
 from .models import (
     Product, Category, Supplier, Sale, Client, User, StoreProfile,
@@ -34,11 +36,50 @@ def get_pusher_client():
         print(f"Error initializing Pusher: {e}")
         return None
 
+
+# FilterSet personalizado para productos con filtrado avanzado
+class ProductFilterSet(FilterSet):
+    """
+    FilterSet personalizado para productos que permite filtrar por:
+    - category: Categoría del producto (por ID)
+    - sku: Código SKU
+    - stock_status: Estado del stock (in_stock, low_stock, out_of_stock)
+    - min_price: Precio mínimo
+    - max_price: Precio máximo
+    """
+    stock_status = ChoiceFilter(
+        method='filter_stock_status',
+        choices=[
+            ('in_stock', 'En Stock'),
+            ('low_stock', 'Stock Bajo'),
+            ('out_of_stock', 'Agotado'),
+        ]
+    )
+    min_price = NumberFilter(field_name='price', lookup_expr='gte')
+    max_price = NumberFilter(field_name='price', lookup_expr='lte')
+    
+    class Meta:
+        model = Product
+        fields = ['category', 'sku', 'stock_status', 'min_price', 'max_price']
+    
+    def filter_stock_status(self, queryset, name, value):
+        if value == 'in_stock':
+            return queryset.filter(stock__gt=10)
+        elif value == 'low_stock':
+            return queryset.filter(stock__lte=10, stock__gt=0)
+        elif value == 'out_of_stock':
+            return queryset.filter(stock=0)
+        return queryset
+
+
 class ProductViewSet(viewsets.ModelViewSet):
     queryset         = Product.objects.select_related('category', 'supplier').all()
     serializer_class = ProductSerializer
-    filter_backends  = [DjangoFilterBackend]
-    filterset_fields = ['category', 'sku']
+    filter_backends  = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_class  = ProductFilterSet
+    search_fields    = ['name', 'sku']
+    ordering_fields  = ['price', 'stock', 'name', 'created_at']
+    ordering          = ['-created_at']
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
@@ -188,15 +229,39 @@ class SaleViewSet(viewsets.ModelViewSet):
             )
         response = super().create(request, *args, **kwargs)
         
-        # Magia Pusher: Avisamos que hay una venta nueva (actualización de inventario)
+        # Magia Pusher: Sincronización en tiempo real de inventario y ventas
         if response.status_code == status.HTTP_201_CREATED:
+            from django.utils import timezone
+            
             client = get_pusher_client()
             if client:
-                channel = f"pos-user-{request.user.id}"
-                print(f"DEBUG: Enviando INVENTORY_UPDATED al canal {channel}")
-                client.trigger(channel, "INVENTORY_UPDATED", {
-                    'message': 'update'
+                # Obtener la venta que acaba de crearse
+                sale_id = response.data.get('id')
+                sale = Sale.objects.prefetch_related('items').get(id=sale_id)
+                user_id = request.user.id
+                channel = f"pos-user-{user_id}"
+                timestamp = timezone.now().isoformat()
+                
+                # 1. Enviar evento INVENTORY_UPDATED por cada producto vendido
+                for item in sale.items.all():
+                    if item.product:
+                        client.trigger(channel, "INVENTORY_UPDATED", {
+                            'message': 'update',
+                            'sale_id': sale.id,
+                            'product_id': item.product.id,
+                            'new_stock': item.product.stock,
+                            'timestamp': timestamp
+                        })
+                
+                # 2. Enviar evento SALES_COMPLETED para confirmar la venta
+                client.trigger(channel, "SALES_COMPLETED", {
+                    'transaction_id': sale.transaction_id,
+                    'total': float(sale.total),
+                    'items_count': sale.items.count(),
+                    'timestamp': timestamp
                 })
+                
+                print(f"DEBUG: Eventos Pusher enviados para venta {sale.transaction_id} al canal {channel}")
             else:
                 print("DEBUG: Pusher client no inicializado en create sale.")
                 
@@ -208,6 +273,8 @@ class SaleViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
+        from django.utils import timezone
+        
         sale = self.get_object()
         
         # 1. Validar que la venta no esté ya cancelada
@@ -237,14 +304,30 @@ class SaleViewSet(viewsets.ModelViewSet):
         sale.status = Sale.Status.CANCELLED
         sale.save()
         
-        # Magia Pusher: Avisamos que la venta se canceló
+        # Magia Pusher: Notificar sincronización en tiempo real de cancelación
         client = get_pusher_client()
         if client:
             channel = f"pos-user-{request.user.id}"
-            print(f"DEBUG: Enviando INVENTORY_UPDATED al canal {channel} por cancelacion.")
-            client.trigger(channel, "INVENTORY_UPDATED", {
-                'message': 'update'
+            timestamp = timezone.now().isoformat()
+            
+            # Enviar evento INVENTORY_UPDATED por cada producto restaurado
+            for item in sale.items.all():
+                if item.product:
+                    client.trigger(channel, "INVENTORY_UPDATED", {
+                        'message': 'update',
+                        'sale_id': sale.id,
+                        'product_id': item.product.id,
+                        'new_stock': item.product.stock,
+                        'timestamp': timestamp
+                    })
+            
+            # Enviar evento de cancelación de venta
+            client.trigger(channel, "SALES_CANCELLED", {
+                'transaction_id': sale.transaction_id,
+                'timestamp': timestamp
             })
+            
+            print(f"DEBUG: Eventos Pusher enviados por cancelación de venta {sale.transaction_id}")
         else:
             print("DEBUG: Pusher client no inicializado en cancel sale.")
         

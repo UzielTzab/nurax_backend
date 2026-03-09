@@ -10,6 +10,7 @@ from .models import (
     InventoryTransaction, Expense, CashShift, SalePayment, ActiveSessionCart
 )
 from .serializers import *
+from .pagination import ProductPagination, SalesPagination
 
 class IsAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -213,6 +214,11 @@ class ProductViewSet(viewsets.ModelViewSet):
 class SaleViewSet(viewsets.ModelViewSet):
     queryset         = Sale.objects.prefetch_related('items').all()
     serializer_class = SaleSerializer
+    pagination_class = SalesPagination
+    filter_backends  = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields    = ['transaction_id']
+    ordering_fields  = ['created_at', 'total']
+    ordering         = ['-created_at']  # Por defecto, las más recientes primero
     
     def get_queryset(self):
         qs = super().get_queryset()

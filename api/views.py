@@ -247,6 +247,7 @@ class SaleViewSet(viewsets.ModelViewSet):
                 user_id = request.user.id
                 channel = f"pos-user-{user_id}"
                 timestamp = timezone.now().isoformat()
+                device_id = request.data.get('device_id', 'unknown')  # Extraer device_id del frontend
                 
                 # 1. Enviar evento INVENTORY_UPDATED por cada producto vendido
                 for item in sale.items.all():
@@ -256,7 +257,8 @@ class SaleViewSet(viewsets.ModelViewSet):
                             'sale_id': sale.id,
                             'product_id': item.product.id,
                             'new_stock': item.product.stock,
-                            'timestamp': timestamp
+                            'timestamp': timestamp,
+                            'device_id': device_id  # Incluir device_id para identificar origen
                         })
                 
                 # 2. Enviar evento SALES_COMPLETED para confirmar la venta
@@ -264,7 +266,8 @@ class SaleViewSet(viewsets.ModelViewSet):
                     'transaction_id': sale.transaction_id,
                     'total': float(sale.total),
                     'items_count': sale.items.count(),
-                    'timestamp': timestamp
+                    'timestamp': timestamp,
+                    'device_id': device_id  # Incluir device_id para identificar origen
                 })
                 
                 print(f"DEBUG: Eventos Pusher enviados para venta {sale.transaction_id} al canal {channel}")
@@ -315,6 +318,7 @@ class SaleViewSet(viewsets.ModelViewSet):
         if client:
             channel = f"pos-user-{request.user.id}"
             timestamp = timezone.now().isoformat()
+            device_id = 'server-action'  # Indicar que es una acción desde el servidor
             
             # Enviar evento INVENTORY_UPDATED por cada producto restaurado
             for item in sale.items.all():
@@ -324,13 +328,15 @@ class SaleViewSet(viewsets.ModelViewSet):
                         'sale_id': sale.id,
                         'product_id': item.product.id,
                         'new_stock': item.product.stock,
-                        'timestamp': timestamp
+                        'timestamp': timestamp,
+                        'device_id': device_id
                     })
             
             # Enviar evento de cancelación de venta
             client.trigger(channel, "SALES_CANCELLED", {
                 'transaction_id': sale.transaction_id,
-                'timestamp': timestamp
+                'timestamp': timestamp,
+                'device_id': device_id
             })
             
             print(f"DEBUG: Eventos Pusher enviados por cancelación de venta {sale.transaction_id}")
@@ -376,7 +382,7 @@ class UserViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action == 'create':
             return [permissions.AllowAny()]
-        if self.action in ('me', 'upload_avatar'):
+        if self.action in ('me', 'upload_avatar', 'change_password', 'update_profile'):
             return [permissions.IsAuthenticated()]
         return [IsAdmin()]
 
@@ -392,6 +398,69 @@ class UserViewSet(viewsets.ModelViewSet):
     def me(self, request):
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['patch'], permission_classes=[permissions.IsAuthenticated],
+            url_path='me/profile')
+    def update_profile(self, request):
+        """
+        PATCH /api/users/me/profile/
+        Actualiza nombre y email del usuario autenticado.
+        Requiere:
+        - name: nombre del usuario (opcional)
+        - email: email del usuario (opcional)
+        """
+        user = request.user
+        name = request.data.get('name')
+        email = request.data.get('email')
+        
+        if name is not None:
+            user.name = name
+        if email is not None:
+            user.email = email
+        
+        user.save(update_fields=['name', 'email'])
+        
+        serializer = self.get_serializer(user)
+        return Response({
+            'detail': 'Perfil actualizado exitosamente.',
+            'success': True,
+            'user': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['patch'], permission_classes=[permissions.IsAuthenticated],
+            url_path='me/change-password')
+    def change_password(self, request):
+        """
+        PATCH /api/users/me/change-password/
+        Permite cambiar la contraseña validando la contraseña actual.
+        Requiere:
+        - current_password: contraseña actual del usuario
+        - new_password: nueva contraseña
+        - confirm_password: confirmación de la nueva contraseña
+        """
+        user = request.user
+        serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
+        
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validar que la contraseña actual sea correcta
+        current_password = serializer.validated_data.get('current_password')
+        if not user.check_password(current_password):
+            return Response(
+                {'detail': 'La contraseña actual es incorrecta.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Cambiar la contraseña
+        new_password = serializer.validated_data.get('new_password')
+        user.set_password(new_password)
+        user.save(update_fields=['password'])
+        
+        return Response({
+            'detail': 'Contraseña cambiada exitosamente.',
+            'success': True
+        }, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['patch'], permission_classes=[IsAdmin])
     def toggle_active(self, request, pk=None):

@@ -97,6 +97,59 @@ class ClientSerializer(serializers.ModelSerializer):
         model  = Client
         fields = ['id', 'name', 'email', 'company', 'plan', 'active', 'created_at', 'avatar_color']
 
+class ChangePasswordSerializer(serializers.Serializer):
+    """Serializer para validar cambio de contraseña seguro."""
+    current_password = serializers.CharField(
+        write_only=True,
+        required=True,
+        style={'input_type': 'password'},
+        help_text='Tu contraseña actual para confirmar identidad'
+    )
+    new_password = serializers.CharField(
+        write_only=True,
+        required=True,
+        style={'input_type': 'password'},
+        help_text='Tu nueva contraseña (mín 8 caract, mayúscula, número)'
+    )
+    confirm_password = serializers.CharField(
+        write_only=True,
+        required=True,
+        style={'input_type': 'password'},
+        help_text='Confirma tu nueva contraseña'
+    )
+    
+    def validate(self, data):
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError
+        
+        current_pwd = data.get('current_password')
+        new_pwd = data.get('new_password')
+        confirm_pwd = data.get('confirm_password')
+        
+        # 1. Validar que las nuevas contraseñas coincidan
+        if new_pwd != confirm_pwd:
+            raise serializers.ValidationError({
+                'confirm_password': 'Las contraseñas no coinciden.'
+            })
+        
+        # 2. Validar que la nueva no sea igual a la actual
+        user = self.context.get('request').user
+        if user.check_password(new_pwd):
+            raise serializers.ValidationError({
+                'new_password': 'La nueva contraseña no puede ser igual a la actual.'
+            })
+        
+        # 3. Validar políticas de seguridad de Django
+        try:
+            validate_password(new_pwd, user=user)
+        except ValidationError as e:
+            raise serializers.ValidationError({
+                'new_password': e.messages
+            })
+        
+        return data
+
+
 class UserSerializer(serializers.ModelSerializer):
     # Campo virtual de solo escritura para recibir el archivo de imagen del frontend
     avatar_file = serializers.ImageField(write_only=True, required=False)

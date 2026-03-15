@@ -62,10 +62,11 @@ class SaleSerializer(serializers.ModelSerializer):
     items    = SaleItemSerializer(many=True)
     payments = SalePaymentSerializer(many=True, read_only=True)
     user     = serializers.PrimaryKeyRelatedField(read_only=True)
+    balance_due = serializers.ReadOnlyField()
     
     class Meta:
         model  = Sale
-        fields = ['id', 'transaction_id', 'user', 'status', 'total', 'items', 'payments', 'created_at']
+        fields = ['id', 'transaction_id', 'user', 'status', 'total', 'items', 'payments', 'created_at', 'customer_name', 'customer_phone', 'amount_paid', 'balance_due']
         
     def create(self, validated_data):
         items_data = validated_data.pop('items')
@@ -90,6 +91,11 @@ class SaleSerializer(serializers.ModelSerializer):
                     reason=f'Venta {sale.transaction_id}',
                     user=validated_data.get('user')
                 )
+        
+        # Si es apartado o crédito, registrar el pago inicial si hay amount_paid
+        if sale.status in ['layaway', 'credit'] and sale.amount_paid and sale.amount_paid > 0:
+            SalePayment.objects.create(sale=sale, amount=sale.amount_paid, user=validated_data.get('user'))
+            
         return sale
 
 class ClientSerializer(serializers.ModelSerializer):

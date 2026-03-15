@@ -94,7 +94,17 @@ class Sale(models.Model):
     status         = models.CharField(max_length=15, choices=Status.choices, default=Status.COMPLETED)
     total          = models.DecimalField(max_digits=12, decimal_places=2)
     created_at     = models.DateTimeField(auto_now_add=True)
+    customer_name  = models.CharField(max_length=200, blank=True, null=True)
+    customer_phone = models.CharField(max_length=20, blank=True, null=True)
+    amount_paid    = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     
+    @property
+    def balance_due(self):
+        total_payments = sum(payment.amount for payment in self.payments.all())
+        if self.status in [self.Status.COMPLETED, self.Status.CANCELLED]:
+            return 0
+        return self.total - total_payments
+
     def __str__(self): return f"{self.transaction_id} — ${self.total}"
 
 

@@ -220,6 +220,27 @@ class SaleViewSet(viewsets.ModelViewSet):
     ordering_fields  = ['created_at', 'total']
     ordering         = ['-created_at']  # Por defecto, las más recientes primero
     
+    @action(detail=False, methods=['get'])
+    def accounts_receivable(self, request):
+        from django.db.models import Q
+        qs = super().get_queryset()
+        if self.request.user.role != 'admin':
+            qs = qs.filter(user=self.request.user)
+        qs = qs.filter(status__in=[Sale.Status.LAYAWAY, Sale.Status.CREDIT])
+        search = request.query_params.get('search', None)
+        if search:
+            qs = qs.filter(
+                Q(customer_name__icontains=search) | 
+                Q(transaction_id__icontains=search) | 
+                Q(customer_phone__icontains=search)
+            )
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(qs, many=True)
+        return Response(serializer.data)
+
     def get_queryset(self):
         qs = super().get_queryset()
         if self.request.user.role != 'admin':
@@ -510,6 +531,7 @@ class StoreProfileViewSet(viewsets.ViewSet):
     """
     permission_classes = [permissions.IsAuthenticated]
 
+
     def list(self, request):
         profile, created = StoreProfile.objects.get_or_create(user=request.user)
         serializer = StoreProfileSerializer(profile)
@@ -679,7 +701,8 @@ class SalePaymentViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        sale_id = self.request.data.get('sale')
+        serializer.save(user=self.request.user, sale_id=sale_id)
 
     def create(self, request, *args, **kwargs):
         sale_id = request.data.get('sale')
@@ -688,6 +711,15 @@ class SalePaymentViewSet(viewsets.ModelViewSet):
         if not sale_id or not amount:
              return Response({'detail': 'sale y amount son requeridos.'}, status=status.HTTP_400_BAD_REQUEST)
              
-        # Optional: update sale status to completed if total amount paid >= sale.total
-        # For now just record the payment
-        return super().create(request, *args, **kwargs)
+        response = super().create(request, *args, **kwargs)
+        
+        # update sale status to completed if total amount paid >= sale.total
+        try:
+            sale = Sale.objects.get(id=sale_id)
+            if sale.balance_due <= 0 and sale.status in [Sale.Status.LAYAWAY, Sale.Status.CREDIT]:
+                sale.status = Sale.Status.COMPLETED
+                sale.save(update_fields=['status'])
+        except Sale.DoesNotExist:
+            pass
+            
+        return response

@@ -2,7 +2,7 @@ from rest_framework import serializers
 import cloudinary.uploader
 from .models import (
     User, Client, Product, Category, Supplier, Sale, SaleItem, StoreProfile,
-    InventoryTransaction, Expense, CashShift, SalePayment
+    InventoryTransaction, Expense, CashShift, SalePayment, InventoryMovement
 )
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -156,13 +156,47 @@ class ChangePasswordSerializer(serializers.Serializer):
         return data
 
 
+class StoreProfileSerializer(serializers.ModelSerializer):
+    # Campo virtual para recibir el archivo del logo desde el frontend
+    logo_file = serializers.ImageField(write_only=True, required=False)
+
+    class Meta:
+        model  = StoreProfile
+        fields = ['id', 'store_name', 'currency_symbol', 'address',
+                  'phone', 'ticket_message', 'logo_url', 'logo_file', 'updated_at',
+                  'company_name', 'ticket_name', 'is_first_setup_completed']
+        extra_kwargs = {
+            'logo_url': {'read_only': True},  # El backend controla este campo
+        }
+
+    def update(self, instance, validated_data):
+        logo_file = validated_data.pop('logo_file', None)
+        if logo_file:
+            result = cloudinary.uploader.upload(logo_file, folder='logos')
+            validated_data['logo_url'] = result.get('secure_url')
+        return super().update(instance, validated_data)
+
+
 class UserSerializer(serializers.ModelSerializer):
     # Campo virtual de solo escritura para recibir el archivo de imagen del frontend
     avatar_file = serializers.ImageField(write_only=True, required=False)
+    store_profile = StoreProfileSerializer(read_only=True)
 
     class Meta:
         model  = User
-        fields = ['id', 'username', 'password', 'name', 'email', 'role', 'is_active', 'date_joined', 'avatar_url', 'avatar_file']
+        fields = [
+            'id',
+            'username',
+            'password',
+            'name',
+            'email',
+            'role',
+            'is_active',
+            'date_joined',
+            'avatar_url',
+            'avatar_file',
+            'store_profile',
+        ]
         extra_kwargs = {
             'password':    {'write_only': True, 'required': False},
             'username':    {'required': False, 'allow_blank': True},
@@ -206,26 +240,6 @@ class UserSerializer(serializers.ModelSerializer):
         password = validated_data.pop('password', None)
         if password:
             instance.set_password(password)
-        return super().update(instance, validated_data)
-
-
-class StoreProfileSerializer(serializers.ModelSerializer):
-    # Campo virtual para recibir el archivo del logo desde el frontend
-    logo_file = serializers.ImageField(write_only=True, required=False)
-
-    class Meta:
-        model  = StoreProfile
-        fields = ['id', 'store_name', 'currency_symbol', 'address',
-                  'phone', 'ticket_message', 'logo_url', 'logo_file', 'updated_at']
-        extra_kwargs = {
-            'logo_url': {'read_only': True},  # El backend controla este campo
-        }
-
-    def update(self, instance, validated_data):
-        logo_file = validated_data.pop('logo_file', None)
-        if logo_file:
-            result = cloudinary.uploader.upload(logo_file, folder='logos')
-            validated_data['logo_url'] = result.get('secure_url')
         return super().update(instance, validated_data)
 
 
@@ -274,3 +288,42 @@ class CashShiftSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'user_name', 'opened_at', 'closed_at', 
                   'starting_cash', 'expected_cash', 'actual_cash', 'difference']
 
+
+class InventoryMovementSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    
+    class Meta:
+        model = InventoryMovement
+        fields = ['id', 'product', 'product_name', 'movement_type', 'quantity', 
+                  'unit_cost', 'total_cost', 'expense', 'cash_shift', 'created_at', 'notes']
+
+
+class RestockSerializer(serializers.Serializer):
+    """Serializer para registrar un reabastecimiento de inventario"""
+    product_id = serializers.IntegerField(required=True)
+    quantity = serializers.IntegerField(required=True, min_value=1)
+    unit_cost = serializers.DecimalField(max_digits=10, decimal_places=2, required=True, min_value=0.01)
+    supplier_id = serializers.IntegerField(required=False, allow_null=True)
+    expense_category = serializers.CharField(required=False, default='inventario')
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+
+class BulkProductSerializer(serializers.Serializer):
+    """Serializer para importar productos en bulk desde Excel"""
+    name = serializers.CharField(max_length=250, required=True)
+    sku = serializers.CharField(max_length=50, required=True)
+    category_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    stock = serializers.IntegerField(required=False, default=0, min_value=0)
+    price = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0)
+    supplier_name = serializers.CharField(max_length=200, required=False, allow_blank=True)
+
+
+class BulkImportSerializer(serializers.Serializer):
+    """Serializer para recibir lista de productos a importar"""
+    products = BulkProductSerializer(many=True, required=True)
+
+
+class OnboardingCompleteSerializer(serializers.Serializer):
+    """Serializer para completar el onboarding"""
+    company_name = serializers.CharField(max_length=200, required=True)
+    ticket_name = serializers.CharField(max_length=100, required=True)

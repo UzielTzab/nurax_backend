@@ -4,7 +4,6 @@ from rest_framework.response import Response
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from django_filters import FilterSet, CharFilter, NumberFilter, ChoiceFilter
-
 from .models import (
     Product, Category, Supplier, Sale, Client, User, StoreProfile,
     InventoryTransaction, Expense, CashShift, SalePayment, ActiveSessionCart
@@ -211,6 +210,96 @@ class ProductViewSet(viewsets.ModelViewSet):
         cart_session, created = ActiveSessionCart.objects.get_or_create(user=request.user)
         return Response({'cart': cart_session.cart_data})
 
+    @action(detail=False, methods=['post'], url_path='register-restock')
+    def register_restock(self, request):
+        """
+        POST /api/products/register-restock/
+        {
+            "product_id": 1,
+            "quantity": 4,
+            "unit_cost": 50,
+            "supplier_id": 1,
+            "expense_category": "Inventario",
+            "notes": "Compra a proveedor mayorista"
+        }
+        """
+        from .serializers import RestockSerializer
+        from .models import InventoryMovement
+        from django.db import transaction
+        
+        serializer = RestockSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            with transaction.atomic():
+                # 1. Obtener el producto
+                product_id = serializer.validated_data['product_id']
+                product = Product.objects.get(id=product_id, user=request.user)
+                
+                quantity = serializer.validated_data['quantity']
+                unit_cost = serializer.validated_data['unit_cost']
+                total_cost = quantity * unit_cost
+                
+                # 2. Obtener la caja abierta del usuario
+                from .models import CashShift
+                try:
+                    current_shift = CashShift.objects.get(user=request.user, closed_at__isnull=True)
+                except CashShift.DoesNotExist:
+                    return Response({
+                        'error': 'No hay una caja abierta actualmente. Abre una caja primero.'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # 3. Crear el GASTO automáticamente
+                expense = Expense.objects.create(
+                    user=request.user,
+                    category='inventario',
+                    description=f"Restock: {product.name} ({quantity} unidades @ ${unit_cost})",
+                    amount=total_cost,
+                    cash_shift=current_shift,
+                    supplier_id=serializer.validated_data.get('supplier_id')
+                )
+                
+                # 4. Crear movimiento de inventario
+                movement = InventoryMovement.objects.create(
+                    product=product,
+                    movement_type='restock',
+                    quantity=quantity,
+                    unit_cost=unit_cost,
+                    total_cost=total_cost,
+                    expense=expense,
+                    cash_shift=current_shift,
+                    user=request.user,
+                    notes=serializer.validated_data.get('notes', '')
+                )
+                
+                # 5. Actualizar stock del producto
+                product.stock += quantity
+                product.save()
+                
+                # 6. Emitir evento a Pusher
+                client = get_pusher_client()
+                if client:
+                    client.trigger(f"pos-user-{request.user.id}", "INVENTORY_UPDATED", {
+                        'message': 'restock',
+                        'product_id': product.id
+                    })
+                
+                # 7. Responder con confirmación
+                return Response({
+                    'success': True,
+                    'message': f'Restock registrado: +{quantity} {product.name}',
+                    'expense_id': expense.id,
+                    'expense_amount': float(total_cost),
+                    'new_stock': product.stock,
+                    'movement_id': movement.id
+                }, status=status.HTTP_201_CREATED)
+        
+        except Product.DoesNotExist:
+            return Response({'error': 'Producto no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 class SaleViewSet(viewsets.ModelViewSet):
     queryset         = Sale.objects.prefetch_related('items').all()
     serializer_class = SaleSerializer
@@ -226,7 +315,16 @@ class SaleViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         if self.request.user.role != 'admin':
             qs = qs.filter(user=self.request.user)
-        qs = qs.filter(status__in=[Sale.Status.LAYAWAY, Sale.Status.CREDIT])
+        
+        # Filtro de estados: incluir LAYAWAY y CREDIT siempre
+        # Si se pasa include_completed=true, también incluir COMPLETED
+        statuses = [Sale.Status.LAYAWAY, Sale.Status.CREDIT]
+        include_completed = request.query_params.get('include_completed', 'false').lower() == 'true'
+        if include_completed:
+            statuses.append(Sale.Status.COMPLETED)
+        
+        qs = qs.filter(status__in=statuses)
+        
         search = request.query_params.get('search', None)
         if search:
             qs = qs.filter(
@@ -417,6 +515,10 @@ class UserViewSet(viewsets.ModelViewSet):
         
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
     def me(self, request):
+        # Asegurar que el usuario tenga StoreProfile para que el frontend
+        # pueda decidir si mostrar el wizard de onboarding.
+        from .models import StoreProfile
+        StoreProfile.objects.get_or_create(user=request.user)
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
 
@@ -528,6 +630,7 @@ class StoreProfileViewSet(viewsets.ViewSet):
     Configuración del negocio por usuario.
     GET  /api/store/  → lee la configuración del usuario conectado
     PATCH /api/store/ → guarda cambios (multipart si hay logo, json si no)
+    POST /api/store/onboarding-complete/ → marca onboarding como completado
     """
     permission_classes = [permissions.IsAuthenticated]
 
@@ -543,6 +646,52 @@ class StoreProfileViewSet(viewsets.ViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['post'], url_path='onboarding-complete')
+    def onboarding_complete(self, request):
+        """
+        POST /api/store/onboarding-complete/
+        {
+            "company_name": "Mi Empresa",
+            "ticket_name": "Recibo"
+        }
+        """
+        from .serializers import OnboardingCompleteSerializer
+        
+        serializer = OnboardingCompleteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            profile, created = StoreProfile.objects.get_or_create(user=request.user)
+            profile.company_name = serializer.validated_data['company_name']
+            profile.ticket_name = serializer.validated_data['ticket_name']
+            profile.is_first_setup_completed = True
+            profile.save()
+            
+            # Emitir evento Pusher
+            try:
+                client = get_pusher_client()
+                if client:
+                    client.trigger(f'pos-user-{request.user.id}', 'ONBOARDING_COMPLETED', {
+                        'company_name': profile.company_name,
+                        'timestamp': str(profile.updated_at)
+                    })
+            except:
+                pass  # Pusher es opcional
+            
+            updated_serializer = StoreProfileSerializer(profile)
+            return Response({
+                'success': True,
+                'message': 'Onboarding completado exitosamente',
+                'data': updated_serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class ExpenseViewSet(viewsets.ModelViewSet):
@@ -558,6 +707,79 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+    
+    @action(detail=False, methods=['post'], url_path='bulk-import')
+    def bulk_import(self, request):
+        """
+        POST /api/products/bulk-import/
+        {
+            "products": [
+                {"name": "Producto 1", "sku": "SKU001", "stock": 10, "price": 99.99, "category_name": "Electrónica", "supplier_name": "Proveedor 1"},
+                ...
+            ]
+        }
+        """
+        from .serializers import BulkImportSerializer
+        from django.db import transaction
+        
+        serializer = BulkImportSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            products_data = serializer.validated_data['products']
+            created_products = []
+            errors = []
+            
+            with transaction.atomic():
+                for idx, product_data in enumerate(products_data):
+                    try:
+                        # 1. Obtener o crear categoría
+                        category = None
+                        if product_data.get('category_name'):
+                            category, _ = Category.objects.get_or_create(
+                                name=product_data['category_name']
+                            )
+                        
+                        # 2. Obtener o crear proveedor
+                        supplier = None
+                        if product_data.get('supplier_name'):
+                            supplier, _ = Supplier.objects.get_or_create(
+                                user=request.user,
+                                name=product_data['supplier_name']
+                            )
+                        
+                        # 3. Crear producto
+                        product = Product.objects.create(
+                            user=request.user,
+                            name=product_data['name'],
+                            sku=product_data['sku'],
+                            category=category,
+                            supplier=supplier,
+                            stock=product_data.get('stock', 0),
+                            price=product_data.get('price', 0)
+                        )
+                        created_products.append(product.id)
+                    except Exception as e:
+                        errors.append({
+                            'row': idx + 1,
+                            'sku': product_data.get('sku', ''),
+                            'error': str(e)
+                        })
+            
+            return Response({
+                'success': True,
+                'message': f'{len(created_products)} productos importados exitosamente',
+                'created_count': len(created_products),
+                'errors': errors,
+                'created_ids': created_products
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CashShiftViewSet(viewsets.ModelViewSet):
@@ -592,21 +814,53 @@ class CashShiftViewSet(viewsets.ModelViewSet):
         if shift.user != request.user and request.user.role != 'admin':
             return Response({'detail': 'No puedes cerrar el turno de otro usuario.'}, status=status.HTTP_403_FORBIDDEN)
 
-        # En un sistema real, aquí calcularíamos el expected_cash sumando las ventas en efectivo del día
-        # Para mantenerlo simple, recibimos expected y actual desde el frontend y la diferencia.
         from django.utils import timezone
+        from django.db.models import Sum
         
-        shift.closed_at = timezone.now()
-        shift.expected_cash = request.data.get('expected_cash', shift.starting_cash)
-        shift.actual_cash = request.data.get('actual_cash', shift.expected_cash)
-        # diff: actual - expected. Si es negativo, faltó dinero. Si es positivo, sobró.
+        # 1. Calcular total de ventas (COMPLETED + PAID)
+        sales_total = Sale.objects.filter(
+            user=shift.user,
+            cash_shift=shift,
+            status__in=['completed', 'paid']
+        ).aggregate(total=Sum('total'))['total'] or 0
+        
+        # 2. Calcular total de gastos
+        expenses_total = Expense.objects.filter(
+            cash_shift=shift
+        ).aggregate(total=Sum('amount'))['total'] or 0
+        
+        # 3. Ganancia real = Ventas - Gastos
+        expected_cash = float(sales_total) - float(expenses_total)
+        
+        # 4. Dinero físico en caja
+        actual_cash = request.data.get('actual_cash', expected_cash)
+        
+        # 5. Calcular diferencia
         try:
-            shift.difference = float(shift.actual_cash) - float(shift.expected_cash)
+            difference = float(actual_cash) - float(expected_cash)
         except (ValueError, TypeError):
-            shift.difference = 0
+            difference = 0
 
+        shift.closed_at = timezone.now()
+        shift.expected_cash = expected_cash
+        shift.actual_cash = actual_cash
+        shift.difference = difference
         shift.save()
-        return Response(self.get_serializer(shift).data)
+        
+        return Response({
+            'id': shift.id,
+            'user': shift.user.id,
+            'user_name': shift.user.name,
+            'opened_at': shift.opened_at,
+            'closed_at': shift.closed_at,
+            'starting_cash': float(shift.starting_cash),
+            'sales_total': float(sales_total),
+            'expenses_total': float(expenses_total),
+            'expected_cash': float(expected_cash),
+            'actual_cash': float(actual_cash),
+            'difference': float(difference),
+            'difference_type': 'surplus' if difference > 0 else 'shortage' if difference < 0 else 'balanced'
+        })
 
 
 class InventoryTransactionViewSet(viewsets.ReadOnlyModelViewSet):

@@ -24,7 +24,6 @@ class Client(models.Model):
     class Plan(models.TextChoices):
         BASICO     = 'basico',     'Básico'
         PRO        = 'pro',        'Pro'
-        ENTERPRISE = 'enterprise', 'Enterprise'
     
     user        = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True)
     name        = models.CharField(max_length=200)
@@ -148,20 +147,45 @@ class InventoryTransaction(models.Model):
     def __str__(self): return f"{self.transaction_type} - {self.quantity} de {self.product.name}"
 
 
+# ─── MOVIMIENTO DE REABASTECIMIENTO (con costo unitario) ───────────────────────
+class InventoryMovement(models.Model):
+    class MovementType(models.TextChoices):
+        SALE    = 'sale',    'Venta'
+        RESTOCK = 'restock', 'Reabastecimiento'
+        ADJUST  = 'adjust',  'Ajuste de Inventario'
+
+    product       = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='movements')
+    movement_type = models.CharField(max_length=20, choices=MovementType.choices)
+    quantity      = models.PositiveIntegerField()
+    unit_cost     = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    total_cost    = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    
+    expense       = models.ForeignKey('Expense', on_delete=models.SET_NULL, null=True, blank=True, related_name='inventory_movements')
+    cash_shift    = models.ForeignKey('CashShift', on_delete=models.CASCADE, related_name='movements')
+    user          = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    
+    created_at    = models.DateTimeField(auto_now_add=True)
+    notes         = models.TextField(blank=True)
+
+    def __str__(self): return f"{self.movement_type} - {self.quantity} de {self.product.name}"
+
+
 # ─── GASTOS / EGRESOS ─────────────────────────────────────────────────────────
 class Expense(models.Model):
     class Category(models.TextChoices):
         SERVICIOS   = 'servicios',   'Servicios (Luz, Agua, Internet)'
         NOMINA      = 'nomina',      'Nómina / Sueldos'
         PROVEEDORES = 'proveedores', 'Pago a Proveedores'
+        INVENTARIO  = 'inventario',  'Inventario / Reabastecimiento'
         VARIOS      = 'varios',      'Gastos Varios'
 
     amount      = models.DecimalField(max_digits=12, decimal_places=2)
     category    = models.CharField(max_length=20, choices=Category.choices)
     description = models.CharField(max_length=255)
-    # URL del comprobante físico (ticket de la luz, etc)
     receipt_url = models.URLField(max_length=800, blank=True, null=True)
     user        = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    supplier    = models.ForeignKey(Supplier, on_delete=models.SET_NULL, null=True, blank=True)
+    cash_shift  = models.ForeignKey('CashShift', on_delete=models.SET_NULL, null=True, blank=True)
     date        = models.DateField(auto_now_add=True)
 
     def __str__(self): return f"{self.category} - ${self.amount}"
@@ -190,6 +214,10 @@ class StoreProfile(models.Model):
     ticket_message   = models.TextField(blank=True)
     # Logo subido a Cloudinary, guardado como URL
     logo_url         = models.URLField(max_length=800, blank=True, null=True)
+    # Nuevos campos para onboarding
+    company_name     = models.CharField(max_length=200, blank=True, default='')
+    ticket_name      = models.CharField(max_length=100, blank=True, default='')
+    is_first_setup_completed = models.BooleanField(default=False)
     updated_at       = models.DateTimeField(auto_now=True)
 
     class Meta:

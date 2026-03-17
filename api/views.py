@@ -652,8 +652,11 @@ class StoreProfileViewSet(viewsets.ViewSet):
         """
         POST /api/store/onboarding-complete/
         {
-            "company_name": "Mi Empresa",
-            "ticket_name": "Recibo"
+            "store_name": "Mi Tienda",
+            "ticket_name": "Recibo",
+            "address": "Av. Reforma 123...",      (opcional)
+            "phone": "+52 55 9876 5432",           (opcional)
+            "ticket_message": "¡Gracias por su compra!"  (opcional)
         }
         """
         from .serializers import OnboardingCompleteSerializer
@@ -664,8 +667,11 @@ class StoreProfileViewSet(viewsets.ViewSet):
         
         try:
             profile, created = StoreProfile.objects.get_or_create(user=request.user)
-            profile.company_name = serializer.validated_data['company_name']
+            profile.store_name = serializer.validated_data['store_name']
             profile.ticket_name = serializer.validated_data['ticket_name']
+            profile.address = serializer.validated_data.get('address', '')
+            profile.phone = serializer.validated_data.get('phone', '')
+            profile.ticket_message = serializer.validated_data.get('ticket_message', '')
             profile.is_first_setup_completed = True
             profile.save()
             
@@ -674,7 +680,7 @@ class StoreProfileViewSet(viewsets.ViewSet):
                 client = get_pusher_client()
                 if client:
                     client.trigger(f'pos-user-{request.user.id}', 'ONBOARDING_COMPLETED', {
-                        'company_name': profile.company_name,
+                        'store_name': profile.store_name,
                         'timestamp': str(profile.updated_at)
                     })
             except:

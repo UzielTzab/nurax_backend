@@ -325,5 +325,8 @@ class BulkImportSerializer(serializers.Serializer):
 
 class OnboardingCompleteSerializer(serializers.Serializer):
     """Serializer para completar el onboarding"""
-    company_name = serializers.CharField(max_length=200, required=True)
+    store_name = serializers.CharField(max_length=200, required=True)
     ticket_name = serializers.CharField(max_length=100, required=True)
+    address = serializers.CharField(max_length=300, required=False, allow_blank=True, default='')
+    phone = serializers.CharField(max_length=30, required=False, allow_blank=True, default='')
+    ticket_message = serializers.CharField(max_length=500, required=False, allow_blank=True, default='')

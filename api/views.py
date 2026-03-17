@@ -823,10 +823,10 @@ class CashShiftViewSet(viewsets.ModelViewSet):
         from django.utils import timezone
         from django.db.models import Sum
         
-        # 1. Calcular total de ventas (COMPLETED + PAID)
+        # 1. Calcular total de ventas (COMPLETED + PAID) - filtrar por fecha del turno
         sales_total = Sale.objects.filter(
             user=shift.user,
-            cash_shift=shift,
+            created_at__gte=shift.opened_at,
             status__in=['completed', 'paid']
         ).aggregate(total=Sum('total'))['total'] or 0
         
@@ -835,8 +835,8 @@ class CashShiftViewSet(viewsets.ModelViewSet):
             cash_shift=shift
         ).aggregate(total=Sum('amount'))['total'] or 0
         
-        # 3. Ganancia real = Ventas - Gastos
-        expected_cash = float(sales_total) - float(expenses_total)
+        # 3. Dinero esperado = Dinero inicial + Ventas - Gastos
+        expected_cash = float(shift.starting_cash) + float(sales_total) - float(expenses_total)
         
         # 4. Dinero físico en caja
         actual_cash = request.data.get('actual_cash', expected_cash)

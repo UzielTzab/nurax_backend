@@ -4,7 +4,8 @@ import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nurax_backend.settings")
 django.setup()
 
-from api.models import Category, User
+from products.models import Category
+from accounts.models import User
 
 print("--- Iniciando poblado de base de datos de producción ---")
 

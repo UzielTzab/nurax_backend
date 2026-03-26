@@ -4,6 +4,7 @@ services:
   db:
     image: postgres:15-alpine
     container_name: nurax_db
+    env_file: postgres.env
     environment:
       POSTGRES_DB: ${DB_NAME:-nurax_db}
       POSTGRES_USER: ${DB_USER:-nurax_user}
@@ -19,16 +20,12 @@ services:
     container_name: nurax_api
     command: bash -c "python manage.py migrate && python init_db.py && python manage.py runserver 0.0.0.0:8000"
     volumes:
-      - .:/app
+      - ${PWD}:/app
     ports:
       - "8000:8000"
+    env_file: postgres.env
     environment:
-      - DB_NAME=${DB_NAME:-nurax_db}
-      - DB_USER=${DB_USER:-nurax_user}
-      - DB_PASSWORD=${DB_PASSWORD:-nurax_password}
       - DB_HOST=db
-      - DB_PORT=5432
-      - DB_SSLMODE=disable
       - DEBUG=True
       - SECRET_KEY=dev-key-change-in-prod-insecure
       - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}

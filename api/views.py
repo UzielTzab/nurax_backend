@@ -1,15 +1,19 @@
-from rest_framework import viewsets, permissions, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.filters import SearchFilter, OrderingFilter
-from django_filters.rest_framework import DjangoFilterBackend
-from django_filters import FilterSet, CharFilter, NumberFilter, ChoiceFilter
-from .models import (
-    Product, Category, Supplier, Sale, Client, User, StoreProfile,
-    InventoryTransaction, Expense, CashShift, SalePayment, ActiveSessionCart
-)
-from .serializers import *
-from .pagination import ProductPagination, SalesPagination
+"""
+Vistas DEPRECADAS de la API.
+
+ADVERTENCIA: Las vistas han sido migradas a las siguientes apps:
+  - accounts.views
+  - products.views
+  - sales.views
+  - inventory.views
+  - expenses.views
+
+Este archivo se mantiene solo para compatibilidad con imports antiguos.
+Para nueva funcionalidad, importar directamente de las apps específicas.
+"""
+
+# Este archivo está intencionalmente vacío.
+
 
 class IsAdmin(permissions.BasePermission):
     def has_permission(self, request, view):

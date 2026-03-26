@@ -28,7 +28,13 @@ INSTALLED_APPS = [
     'cloudinary_storage',
     'django_filters',
     'drf_spectacular',
-    # Local
+    # Local apps - Domain driven
+    'accounts.apps.AccountsConfig',
+    'products.apps.ProductsConfig',
+    'sales.apps.SalesConfig',
+    'inventory.apps.InventoryConfig',
+    'expenses.apps.ExpensesConfig',
+    # Legacy
     'api',
 ]
 
@@ -157,7 +163,7 @@ cloudinary.config(
 )
 
 # AUTH USER MODEL
-AUTH_USER_MODEL = 'api.User'
+AUTH_USER_MODEL = 'accounts.User'
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Nurax API',

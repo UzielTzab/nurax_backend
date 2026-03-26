@@ -22,6 +22,7 @@ pip-delete-this-directory.txt
 # Environment Variables
 .env
 .env.local
+postgres.env
 
 # IDEs / OS
 .vscode/

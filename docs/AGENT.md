@@ -1,153 +1,389 @@
-# Nurax Backend - AGENT.md
+# Nurax Backend - AGENT GUIDE
 
-Documentación técnica del backend de Nurax Inventario. Este archivo contiene información crítica para IAs/Copilot que necesiten trabajar en este proyecto.
-
----
-
-## Eres un ingeniero de software, que escribe código limpio y se prevee de errores antes de que ocurran, aplica las mejores práctcas y modelos/patrones más eficientes a nivel de rendimiento computacional. No escribes código de borrador, escribes código preparado para producción.
-
-## Recuerda que cada vez que vaya a realizar un cambio, actualices los archivos y su contenido de la carpeta docs, ya que es importante que estén actualizados.
-
-## Siempre que inicies un nuevo cambio debes realizar un planeaci'on que posteriormente te debo aprobar para que depués lo implmentes. 
-
-## Project Overview
-
-**Nombre:** Nurax Backend (API + Base de Datos)  
-**Descripción:** API REST para gestión de inventario, ventas, gastos y cortes de caja. Sistema POS (Point of Sale) para tiendas pequeñas y medianas.  
-**Tipo:** Proyecto único (no monorepo)  
-**Stack principal:** Django 6.0.2 + Django REST Framework 3.16.1 + PostgreSQL 15 + Docker  
-**Propósito:** Proporcionar backend robusto para aplicación de inventario con gestión de:
-- Productos y categorías
-- Ventas y pagos (crédito, apartado, venta normal)
-- Inventario (kárdex, movimientos, ajustes)
-- Gastos y cortes de caja
-- Perfiles de tienda (configuración por usuario)
+Documentación técnica para desarrolladores y agentes de IA que trabajan en el backend de Nurax Inventario.
 
 ---
 
-## Estructura del Repositorio
+## 🎯 Principios de Desarrollo
+
+1. **Domain-Driven Design (DDD)**: Cada app representa un "bounded context"
+2. **Clean Code**: Type hints, docstrings Google-style, validación multi-capas
+3. **Zero Prefixes**: DB tables sin prefijo "api_" (user, product, sale, etc)
+4. **Test Coverage**: Mínimo 60 tests automáticos (actualmente 60/60 ✅)
+5. **API Versionizing**: Todos los endpoints en /api/v1/*
+
+---
+
+## 🏗️ Arquitectura Actual (Post-Refactorización)
+
+### Estructura de Aplicaciones
 
 ```
 nurax_backend/
-├── manage.py                    # Script de gestión de Django
-├── requirements.txt             # Dependencias Python
-├── Dockerfile                   # Configuración Docker
-├── docker-compose.yml           # Orquestación de servicios
-├── init_db.py                   # Script inicialización de BD
-├── populate_db.py               # Script de datos de prueba
-├── db.sqlite3                   # BD local (no usar en prod)
-├── README.md                    # Documentación de uso
-│
-├── docs/                        # 📁 Documentación para IAs
-│   ├── AGENT.md                 # Este archivo
-│   ├── DATABASE_SCHEMA.md       # Diagrama ERD y relaciones
-│   ├── API_ENDPOINTS.md         # Listado de endpoints
-│   └── DEVELOPMENT_GUIDE.md     # Guía para desarrollo
-│
-├── api/                         # 🔷 Aplicación principal Django
-│   ├── models.py                # Definición de modelos de BD
-│   ├── views.py                 # ViewSets y vistas DRF
-│   ├── serializers.py          # Serialización de datos
-│   ├── urls.py                 # Rutas de la API
-│   ├── pagination.py           # Configuración de paginación
-│   ├── admin.py                # Panel de administración
-│   ├── apps.py                 # Configuración de app
-│   ├── tests.py                # Tests unitarios
-│   └── migrations/             # Historial de cambios BD
-│       ├── 0001_initial.py
-│       ├── 0002_alter_user_email.py
-│       ├── ...
-│       └── 0013_storeprofile_company_name_and_more.py
-│
-└── nurax_backend/              # 🔧 Configuración del proyecto
-    ├── settings.py             # Configuración principal
-    ├── urls.py                 # URLs raíz
-    ├── asgi.py                 # ASGI para servidor async
-    └── wsgi.py                 # WSGI para producción
+├── accounts/          # Usuarios, clientes, perfiles de tienda
+├── products/          # Catálogo de productos
+├── sales/             # Transacciones de venta
+├── inventory/         # Kárdex y movimientos
+├── expenses/          # Gastos y cortes de caja
+├── api/               # Shared: exceptions, constants
+└── nurax_backend/     # Config central
+```
+
+### Aplicaciones por Contexto
+
+| App | Responsabilidad | Modelos | Tests |
+|-----|-----------------|---------|-------|
+| **accounts** | Auth, usuarios, clientes, perfiles | User, Client, StoreProfile, ActiveSessionCart | 7 |
+| **products** | Catálogo, categorías, proveedores | Product, Category, Supplier | 11 |
+| **sales** | Ventas, items, pagos | Sale, SaleItem, SalePayment | 14 |
+| **inventory** | Kárdex, auditoría de stock | InventoryTransaction, InventoryMovement | 7 |
+| **expenses** | Gastos, cortes de caja | Expense, CashShift | 13 |
+| **api** | Shared, excepciones, constantes | - | 8 |
+
+---
+
+## 📋 Workflow para Nuevas Características
+
+### 1. Planificación (SIEMPRE PRIMERO)
+```markdown
+Antes de implementar, estructura el plan:
+
+**Objetivo**: [qué se busca lograr]
+**Contexto**: [qué app/apps afecta]
+**Cambios**:
+  - Models: [qué modelos se crean/modifican]
+  - Serializers: [qué serializers se actualizan]
+  - Views: [qué endpoints se agregan]
+  - Tests: [qué tests se agregan]
+  - Migrations: [migrations necesarias]
+**Riesgos**: [qué podría salir mal]
+**Validación**: [cómo verificar que funciona]
+```
+
+### 2. Implementación
+- Crear migrations inmediatamente
+- Escribir tests primero (TDD)
+- Implementar código
+- Ejecutar tests locales
+- Hacer git commit
+
+### 3. Actualización de Documentación
+- Actualizar ARCHITECTURE.md si hay cambios de modelos
+- Actualizar API_ENDPOINTS.md si hay nuevos endpoints
+- Actualizar este AGENT.md si hay cambios en workflow
+
+---
+
+## 🔧 Patrones & Standards
+
+### Type Hints (SIEMPRE)
+```python
+# ✅ CORRECTO
+def get_status(self) -> str:
+    return 'in_stock'
+
+class ProductManager(models.Manager):
+    def get_queryset(self) -> QuerySet:
+        return ProductQuerySet(...)
+
+# ❌ INCORRECTO
+def get_status(self):  # Sin type hint
+    return 'in_stock'
+```
+
+### Docstrings (Google Style)
+```python
+def calculate_total(items: List[SaleItem]) -> Decimal:
+    """
+    Calcula el total de una venta.
+    
+    Args:
+        items: Lista de items de venta
+    
+    Returns:
+        Total de la venta como Decimal
+    
+    Example:
+        >>> calculate_total([item1, item2])
+        Decimal('299.97')
+    """
+```
+
+### Validación Multi-Capas
+```
+1. MODEL: validators= en Field
+2. CUSTOM: MyValidator() en model Meta
+3. SERIALIZER: validate_field() en Serializer
+4. VIEW: Logic en ViewSet si es necesario
+```
+
+### Managers con QuerySet Optimization
+```python
+# Siempre incluir select_related/prefetch_related
+class ProductQuerySet(models.QuerySet):
+    def with_related(self) -> QuerySet:
+        return self.select_related('user', 'category', 'supplier')
 ```
 
 ---
 
-## Componentes/Módulos Principales
+## 📍 Archivos Clave
 
-### **1. API Application (`api/`)**
+### Excepciones
+**Archivo**: `api/exceptions.py`
+- `InsufficientStockError`
+- `InvalidTransactionError`
+- `UserNotAuthenticatedError`
+- `PermissionDeniedError`
+- `ResourceNotFoundError`
+- `ValidationError`
 
-| Aspecto | Detalle |
-|---------|---------|
-| **Directorio** | `api/` |
-| **Purpose** | Núcleo de la API REST. Define modelos, vistas, serializadores y rutas |
-| **Tecnologías** | Django 6.0.2, Django REST Framework 3.16.1, django-filter, drf-spectacular |
-| **Archivos clave** | `models.py`, `views.py`, `serializers.py`, `urls.py`, `pagination.py` |
+**Patrón**: Heredar de `APIException`, establecer `status_code` y `default_detail`
 
-#### Modelos principales (ver DATABASE_SCHEMA.md para diagrama):
-- **User** - usuario del sistema (extiende AbstractUser)
-- **Client** - empresas que contratan el servicio
-- **Product** - productos en inventario
-- **Category** - categorización de productos
-- **Supplier** - proveedores
-- **Sale** - transacciones de venta
-- **SaleItem** - ítems dentro de una venta
-- **SalePayment** - abonos a ventas en crédito/apartado
-- **InventoryTransaction** - movimientos de inventario (kárdex)
-- **InventoryMovement** - detalles de movimientos
-- **Expense** - gastos/egresos
-- **CashShift** - cortes de caja
-- **StoreProfile** - configuración por tienda
-- **ActiveSessionCart** - carrito de sesión activa
+### Constantes
+**Archivo**: `api/constants.py`
+- `SaleStatus`: COMPLETED, PENDING, CANCELLED, CREDIT, LAYAWAY
+- `STOCK_LOW_THRESHOLD`: 10
+- `STOCK_CRITICAL_THRESHOLD`: 5
+- Pricing, pagination, categorías, etc
 
-### **2. Settings y Configuración (`nurax_backend/`)**
+**Regla**: Nunca hardcodear valores, usar constantes!
 
-| Aspecto | Detalle |
-|---------|---------|
-| **Directorio** | `nurax_backend/` |
-| **Purpose** | Configuración central del proyecto Django |
-| **Archivos clave** | `settings.py`, `urls.py` |
+### Settings
+**Archivo**: `nurax_backend/settings.py`
+- `INSTALLED_APPS`: Todas las 5 apps + api
+- `AUTH_USER_MODEL`: 'accounts.User'
+- `REST_FRAMEWORK`: Paginación, autenticación, filtrado
+- `CLOUDINARY`: Configuración de almacenamiento
 
-#### En `settings.py`:
-- **INSTALLED_APPS**: incluye `api`, `rest_framework`, `corsheaders`, `cloudinary_storage`, etc.
-- **Autenticación**: JWT (SimpleJWT) con `TokenObtainPairView` y `TokenRefreshView`
-- **Paginación**: `PageNumberPagination` (defecto: 10 items/página)
-- **Filtrado**: `django-filter` habilitado
-- **CORS**: Hace que cualquier origen pueda acceder (revisar en producción)
-- **Base de datos**: PostgreSQL configurada por variables de entorno
+### URLs
+**Archivo**: `nurax_backend/urls.py`
+- Estructura: `/api/v1/{app}/{plural_resource}/`
+- Ejemplos:
+  - `/api/v1/accounts/users/`
+  - `/api/v1/products/products/`
+  - `/api/v1/sales/sales/`
+  - `/api/v1/inventory/transactions/`
+  - `/api/v1/expenses/expenses/`
 
 ---
 
-## Key Technologies
+## 🧪 Testing Strategy
 
-### **Backend**
-- **Framework**: Django 6.0.2
-- **API**: Django REST Framework 3.16.1
-- **ORM**: Django ORM (modelos)
-- **BD**: PostgreSQL 15 (producción), SQLite3 (dev local)
-- **Autenticación**: JWT (djangorestframework_simplejwt)
-- **Almacenamiento**: Cloudinary (imágenes/archivos)
-- **Notificaciones**: Pusher (tiempo real)
+### Archivo de Tests por App
+- `accounts/tests.py`: 7 tests
+- `products/tests.py`: 11 tests
+- `sales/tests.py`: 14 tests
+- `inventory/tests.py`: 7 tests
+- `expenses/tests.py`: 13 tests
+- `api/tests.py`: 8 tests (integration)
+- **TOTAL**: 60 tests ✅
 
-### **Infrastructure**
-- **Containerización**: Docker + Docker Compose
-- **Servidor**: Python 3.12
-- **Librerías clave**:
-  - `django-cors-headers` - manejo de CORS
-  - `django-cloudinary-storage` - integración con Cloudinary
-  - `django-filter` - filtrado avanzado en APIs
-  - `drf-spectacular` - documentación automática OpenAPI
-  - `psycopg2-binary` - driver PostgreSQL
-  - `python-dotenv` - variables de entorno
+### Patrón: AAA (Arrange-Act-Assert)
+```python
+def test_product_status_low_stock(self):
+    # Arrange: Preparar datos
+    product = Product.objects.create(name='X', stock=8)
+    
+    # Act: Ejecutar
+    status = product.status
+    
+    # Assert: Verificar
+    self.assertEqual(status, 'low_stock')
+```
 
-### **Utilidades**
-- `Pillow` - procesamiento de imágenes
-- `requests` - HTTP client
-- `PyYAML` - parsing YAML (para especificaciones)
-- `whitenoise` - servicio de archivos estáticos en prod
-
----
-
-## Cómo Ejecutar / Desarrollar
-
-### **Build y Levantamiento (con Docker)**
-
+### Ejecución
 ```bash
+# Ejecutar todos los tests
+docker-compose exec -T api python manage.py test accounts products sales inventory expenses api -v 0
+
+# Ejecutar solo una app
+docker-compose exec -T api python manage.py test accounts -v 2
+
+# Con coverage (si está instalado)
+docker-compose exec -T api pytest --cov=accounts --cov=products --cov-report=html
+```
+
+---
+
+## 📦 Dependencias Clave
+
+### Django & DRF
+- `Django==6.0.2` - Framework web
+- `djangorestframework==3.16.1` - API REST
+- `rest_framework_simplejwt==5.3.2` - JWT auth
+- `django-filter==24.1` - Filtrado de API
+- `drf-spectacular==0.27.2` - OpenAPI docs
+- `django-cors-headers==4.3.1` - CORS handling
+
+### Database & ORM
+- `psycopg2-binary==2.9.9` - PostgreSQL driver
+- `dj-database-url==2.1.0` - Parsing DATABASE_URL
+
+### Storage & Media
+- `cloudinary==1.36.0` - Image hosting
+- `django-cloudinary-storage==0.3.10` - Storage backend
+- `Pillow==10.1.0` - Image manipulation
+
+### Utilities
+- `python-dotenv==1.0.0` - Environment variables
+- `requests==2.31.0` - HTTP client
+- `PyYAML==6.0.1` - YAML parsing
+- `whitenoise==6.6.0` - Static files (prod)
+
+### Development
+- `pytest-django==4.7.0` - Testing framework
+- `pytest-cov==4.1.0` - Coverage measurement
+
+---
+
+## 🐳 Docker & Environment
+
+### docker-compose.yml
+```yaml
+services:
+  db:
+    image: postgres:15-alpine
+    env_file: postgres.env      # DB credentials
+    volumes: ['./nurax_pgdata:/var/lib/postgresql/data']
+  
+  api:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8000
+    env_file: postgres.env      # DB connection
+    ports: ['8000:8000']
+    volumes: ['${PWD}:/app']
+```
+
+### postgres.env
+```bash
+DB_NAME=nurax_db
+DB_USER=nurax_user
+DB_PASSWORD=secure_password
+DB_HOST=db
+DB_PORT=5432
+DB_SSLMODE=disable
+```
+
+### .env (Cloudinary, Pusher)
+```bash
+CLOUDINARY_CLOUD_NAME=xxx
+CLOUDINARY_API_KEY=xxx
+CLOUDINARY_API_SECRET=xxx
+
+PUSHER_APP_ID=xxx
+PUSHER_KEY=xxx
+PUSHER_SECRET=xxx
+PUSHER_CLUSTER=xxx
+
+DJANGO_SECRET_KEY=xxx
+DJANGO_DEBUG=False
+DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+```
+
+### Comandos Comunes
+```bash
+# Build imagen
+docker-compose build
+
+# Iniciar servicios
+docker-compose up -d
+
+# Ver logs
+docker-compose logs api
+
+# Ejecutar migrations
+docker-compose exec -T api python manage.py migrate
+
+# Acceder a shell Django
+docker-compose exec api python manage.py shell
+
+# Crear superuser
+docker-compose exec api python manage.py createsuperuser
+
+# Limpiar datos y recrear
+docker-compose down -v && docker-compose up -d
+```
+
+---
+
+## 🔄 Git Workflow
+
+### Commits después de cambios
+```bash
+git add .
+git commit -m "feat: [descripción breve]
+
+- Cambio 1
+- Cambio 2
+- Tests agregados"
+```
+
+### Convención de mensajes
+- `feat:` - Nueva característica
+- `fix:` - Arreglo de bug
+- `refactor:` - Cambio de código sin funcionalidad
+- `docs:` - Cambios en documentación
+- `test:` - Agregar/actualizar tests
+- `chore:` - Cambios en dependencias, config
+
+---
+
+## 📚 Documentación Relacionada
+
+- **ARCHITECTURE.md** - Diseño de bounded contexts, patrones, flujos de negocio
+- **CLEAN_CODE_STANDARDS.md** - Estándares de código (type hints, validators, etc)
+- **DATABASE_SCHEMA.md** - Diagrama ERD, relaciones, índices
+- **API_ENDPOINTS.md** - Listado completo de endpoints
+- **DEVELOPMENT_GUIDE.md** - Guía paso-a-paso
+
+---
+
+## ✅ Checklist para Code Review
+
+Antes de hacer commit, verificar:
+
+- [ ] Type hints en todas las funciones
+- [ ] Docstrings en métodos públicos
+- [ ] Tests escritos (AAA pattern)
+- [ ] Managers con select_related/prefetch_related
+- [ ] Validación multi-capas
+- [ ] Excepciones centralizadas (no raise generic)
+- [ ] Constantes en api/constants.py
+- [ ] Migraciones creadas y correctas
+- [ ] Documentación actualizada
+- [ ] Tests pasen: `python manage.py test`
+- [ ] Commit message descriptivo
+
+---
+
+## 🚨 Troubleshooting
+
+### "Module not found" error
+- Verificar que app está en `INSTALLED_APPS` en settings.py
+- Ejecutar migrations: `python manage.py makemigrations && migrate`
+
+### "No database table" error
+- Crear migrations: `python manage.py makemigrations app_name`
+- Aplicar: `python manage.py migrate`
+
+### Import errors entre apps
+- Usar `from typing import TYPE_CHECKING` para evitar circular imports
+- Preferir strings para ForeignKey: `models.ForeignKey('other_app.Model')`
+
+### Tests lentos
+- Verificar que no hay queries sin `select_related`/`prefetch_related`
+- Usar `--parallel` para Tests: `pytest --parallel 4`
+
+---
+
+## Última Actualización
+
+**Fecha**: Marzo 26, 2026
+**Versión**: 2.0 (Post-Refactorización DDD)
+**Tests**: 60/60 ✅
+**Coverage**: Modelos, Serializers, Views, Integración
+
 # Construir imágenes y levantar contenedores
 docker-compose up --build
 

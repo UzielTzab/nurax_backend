@@ -46,6 +46,14 @@ Bienvenido a la documentación del backend de Nurax. Este directorio contiene to
    - **Duración lectura:** 40-60 minutos (referencia)
    - **Para quién:** Backend developers, QA
 
+### 5. **[MIGRATION_ORDER_FIX.md](MIGRATION_ORDER_FIX.md)** - Error de Migraciones
+   - ❌ Problema: `InconsistentMigrationHistory` en producción
+   - ✅ Solución implementada
+   - Causa y prevención
+   - Verificación post-fix
+   - **Duración lectura:** 5-10 minutos
+   - **Para quién:** DevOps, Backend developers, Render deploy troubleshooting
+
 ---
 
 ## 🎯 Guía Rápida por Rol

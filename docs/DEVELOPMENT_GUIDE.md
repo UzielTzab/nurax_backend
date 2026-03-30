@@ -732,6 +732,25 @@ class ProductViewSet(viewsets.ModelViewSet):
 
 ## Troubleshooting
 
+### **⚠️ "InconsistentMigrationHistory" en Producción**
+
+```
+django.db.migrations.exceptions.InconsistentMigrationHistory: 
+Migration admin.0001_initial is applied before its dependency accounts.0001_initial
+```
+
+**Solución completa:** Ver [MIGRATION_ORDER_FIX.md](./MIGRATION_ORDER_FIX.md)
+
+**Quick fix:**
+```bash
+# La migración 0002_fix_admin_dependency.py en accounts/ corrige esto automaticamente
+python manage.py migrate
+```
+
+**En Render:** El fix se aplicará en el próximo deploy.
+
+---
+
 ### **"relation 'api_product' does not exist"**
 
 ```bash

@@ -26,9 +26,19 @@ password_admin = os.environ.get('ADMIN_PASSWORD')
 if not password_admin:
     print("[Aviso] No se definió ADMIN_PASSWORD en el entorno. Saltando creación del Superusuario para no interrumpir el inicio del servidor.")
 else:
-    if not User.objects.filter(email=email_admin).exists():
+    # Verificar por username Y email (idempotent)
+    admin_username = 'admin_produccion'
+    admin_exists = User.objects.filter(username=admin_username).exists()
+    email_exists = User.objects.filter(email=email_admin).exists()
+    
+    if admin_exists:
+        existing_admin = User.objects.get(username=admin_username)
+        print(f"[Aviso] Superusuario '{admin_username}' ya existe con email: {existing_admin.email}")
+    elif email_exists:
+        print(f"[Aviso] Email '{email_admin}' ya está registrado en otro usuario.")
+    else:
         User.objects.create_superuser(
-            username='admin_produccion', 
+            username=admin_username, 
             email=email_admin, 
             password=password_admin,
             name='Administrador Maestro',
@@ -36,7 +46,5 @@ else:
             is_active=True
         )
         print(f"[Creado] Superusuario maestro '{email_admin}' creado con éxito.")
-    else:
-        print(f"[Aviso] El superusuario '{email_admin}' ya existe en la base de datos.")
 
 print("--- Finalizado ---")

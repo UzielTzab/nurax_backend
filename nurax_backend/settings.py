@@ -4,9 +4,13 @@ import os
 import dj_database_url
 from dotenv import load_dotenv
 
-load_dotenv()
-
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from both config files
+# In Docker: Docker Compose loads these via env_file, but we still load locally for safety
+# In development: Must have both .env and config/postgres.env
+load_dotenv(BASE_DIR / 'config' / 'postgres.env')  # Database variables
+load_dotenv(BASE_DIR / '.env')  # Application variables
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'dev-key-change-in-prod-insecure')
 DEBUG = os.getenv('DEBUG', 'True') == 'True'

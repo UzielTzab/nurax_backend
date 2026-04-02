@@ -170,6 +170,13 @@ Listado completo de endpoints de la API REST. Todos requieren autenticación con
 
 **POST** `/api/clients/` - Crear cliente
 
+⚠️ **IMPORTANTE**: Al crear un cliente se crea automáticamente una cuenta de usuario con:
+- **email**: igual al email del cliente
+- **username**: igual al email del cliente
+- **password**: `nurax123` (se recomienda cambiar en el primer acceso)
+- **role**: `cliente`
+- **name**: nombre del cliente
+
 ```json
 {
   "name": "Carlos López",
@@ -177,6 +184,27 @@ Listado completo de endpoints de la API REST. Todos requieren autenticación con
   "company": "Tienda XYZ",
   "plan": "pro",
   "avatar_color": "#FF5733"
+}
+```
+
+**Respuesta (201) - Nota que incluye usuario creado:**
+```json
+{
+  "id": 1,
+  "name": "Carlos López",
+  "email": "carlos@example.com",
+  "company": "Tienda XYZ",
+  "plan": "pro",
+  "active": true,
+  "created_at": "2024-01-15T10:30:00Z",
+  "user": {
+    "id": 15,
+    "email": "carlos@example.com",
+    "name": "Carlos López",
+    "role": "cliente",
+    "avatar_url": null,
+    "is_active": true
+  }
 }
 ```
 

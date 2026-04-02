@@ -6,10 +6,14 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from .models import User, Client, StoreProfile
 from .serializers import UserSerializer, ClientSerializer, StoreProfileSerializer
 
 User = get_user_model()
+
+# Contraseña por defecto para nuevos clientes
+DEFAULT_CLIENT_PASSWORD = 'nurax123'
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -80,11 +84,47 @@ class UserViewSet(viewsets.ModelViewSet):
 
 
 class ClientViewSet(viewsets.ModelViewSet):
-    """ViewSet para clientes."""
+    """ViewSet para clientes.
+    
+    Al crear un cliente, se crea automáticamente un usuario para que pueda acceder al sistema.
+    Usuario creado:
+      - email: igual al email del cliente
+      - username: igual al email del cliente
+      - password: "nurax123" (recomendado cambiar en primer login)
+      - role: 'cliente'
+      - name: nombre del cliente
+    """
     
     permission_classes = [IsAuthenticated]
     queryset = Client.objects.all()
     serializer_class = ClientSerializer
+    
+    @transaction.atomic
+    def perform_create(self, serializer):
+        """Crea un cliente y su usuario asociado automáticamente.
+        
+        Esta operación es atómica: si falla la creación del usuario,
+        se revierte también la creación del cliente.
+        
+        Args:
+            serializer: ClientSerializer con datos validados
+            
+        Raises:
+            ValidationError: Si el email ya existe en User o Client
+        """
+        client_data = serializer.validated_data
+        
+        # Crear usuario
+        user = User.objects.create_user(
+            email=client_data['email'],
+            username=client_data['email'],
+            password=DEFAULT_CLIENT_PASSWORD,
+            name=client_data['name'],
+            role=User.Role.CLIENTE
+        )
+        
+        # Guardar cliente con usuario asociado
+        serializer.save(user=user)
 
 
 class StoreProfileViewSet(viewsets.ModelViewSet):

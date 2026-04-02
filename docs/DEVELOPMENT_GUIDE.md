@@ -730,6 +730,72 @@ class ProductViewSet(viewsets.ModelViewSet):
 
 ---
 
+## Flujos Especiales de Negocio
+
+### **Creación de Cliente con Usuario Automático**
+
+**Contexto:** Cuando un administrador crea un cliente en el sistema, se debe crear automáticamente una cuenta de usuario para que el cliente pueda acceder.
+
+**Implementación:**
+- Ubicación: `accounts/views.py` - `ClientViewSet.perform_create()`
+- Transacción atómica: Si falla la creación del usuario, se revierte la creación del cliente
+
+**Credenciales de Nueva Cuenta:**
+- **email**: Igual al email del cliente
+- **username**: Igual al email del cliente
+- **password**: `nurax123` (se recomienda cambiar en primer acceso)
+- **role**: `cliente`
+- **name**: Nombre del cliente
+
+**Código:**
+```python
+from django.db import transaction
+
+class ClientViewSet(viewsets.ModelViewSet):
+    @transaction.atomic
+    def perform_create(self, serializer):
+        """Crea cliente y usuario asociado automáticamente."""
+        client_data = serializer.validated_data
+        
+        # Crear usuario
+        user = User.objects.create_user(
+            email=client_data['email'],
+            username=client_data['email'],
+            password='nurax123',
+            name=client_data['name'],
+            role=User.Role.CLIENTE
+        )
+        
+        # Guardar cliente con usuario
+        serializer.save(user=user)
+```
+
+**Validación:**
+- El email debe ser único en ambas tablas (User y Client)
+- Se valida en el `ClientSerializer.validate_email()`
+- Ver `accounts/tests.py` para casos de prueba
+
+**Respuesta API:**
+```json
+{
+  "id": 1,
+  "name": "Juan García",
+  "email": "juan@example.com",
+  "company": "García Inc",
+  "plan": "basico",
+  "active": true,
+  "user": {
+    "id": 42,
+    "email": "juan@example.com",
+    "name": "Juan García",
+    "role": "cliente",
+    "is_active": true
+  }
+}
+```
+
+---
+
 ## Troubleshooting
 
 ### **⚠️ "InconsistentMigrationHistory" en Producción**

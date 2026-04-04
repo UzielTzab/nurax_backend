@@ -14,63 +14,239 @@ Documentación técnica para desarrolladores y agentes de IA que trabajan en el 
 
 ---
 
-## 🏗️ Arquitectura Actual (Post-Refactorización)
+## 🏗️ Arquitectura ARCHITECTURE_V2 (Multi-Tenant)
 
 ### Estructura de Aplicaciones
 
 ```
 nurax_backend/
-├── accounts/          # Usuarios, clientes, perfiles de tienda
-├── products/          # Catálogo de productos
-├── sales/             # Transacciones de venta
-├── inventory/         # Kárdex y movimientos
-├── expenses/          # Gastos y cortes de caja
+├── accounts/          # Auth multi-tenant, usuarios, stores, membresías
+├── products/          # Catálogo de productos con códigos/empaques
+├── sales/             # Transacciones de venta con pagos
+├── inventory/         # Kárdex (InventoryMovement) - solo lectura
+├── expenses/          # Caja, gastos, órdenes de compra
+├── carts/             # Carrito en tiempo real (WebSocket-ready)
 ├── api/               # Shared: exceptions, constants
 └── nurax_backend/     # Config central
 ```
 
-### Aplicaciones por Contexto
+### Aplicaciones & Responsabilidades - V2
 
-| App | Responsabilidad | Modelos | Tests |
-|-----|-----------------|---------|-------|
-| **accounts** | Auth, usuarios, clientes, perfiles | User, Client, StoreProfile, ActiveSessionCart | 7 |
-| **products** | Catálogo, categorías, proveedores | Product, Category, Supplier | 11 |
-| **sales** | Ventas, items, pagos | Sale, SaleItem, SalePayment | 14 |
-| **inventory** | Kárdex, auditoría de stock | InventoryTransaction, InventoryMovement | 7 |
-| **expenses** | Gastos, cortes de caja | Expense, CashShift | 13 |
-| **api** | Shared, excepciones, constantes | - | 8 |
+| App | Responsabilidad | Modelos | UUID PK |
+|-----|-----------------|---------|---------|
+| **accounts** | Multi-tenancy, auth, equipos | User, Store, StoreMembership, Client | ✅ |
+| **products** | Catálogo con códigos/empaques | Category, Supplier, Product, ProductPackaging, ProductCode | ✅ |
+| **sales** | Ventas con pagos y estado | Sale, SaleItem, SalePayment | ✅ |
+| **inventory** | Kárdex inmutable con stock tracking | InventoryMovement (read-only) | ✅ |
+| **expenses** | Caja, gastos, compras | CashShift, CashMovement, ExpenseCategory, Expense, PurchaseOrder, PurchaseOrderItem | ✅ |
+| **carts** | Carrito real-time Pusher | ActiveCart, CartItem | ✅ |
+| **api** | Shared, excepciones, constantes | - | - |
 
 ---
 
-## 📋 Workflow para Nuevas Características
+## 🎯 Skills de la API V2
+
+### 1. Multi-Tenancy con Store
+- **Capacidad**: Cada tienda es aislada (todos los modelos tienen `store` FK)
+- **Implementación**: Queryset filtering en ViewSets por `user.storemembership_set`
+- **Ejemplo**:
+  ```python
+  def get_queryset(self):
+      user_stores = self.request.user.storemembership_set.values_list('store_id')
+      return self.model.objects.filter(store_id__in=user_stores)
+  ```
+- **Endpoints**: `/stores/` listar tiendas, `/stores/{id}/` obtener detalles
+
+### 2. Control de Acceso por Rol (RBAC)
+- **Roles**: Owner, Manager, Cashier
+- **Capacidad**: Validación en StoreMembershipViewSet
+- **Ejemplo**: Solo Owner puede invitar nuevos miembros
+  ```python
+  if membership.requester_role != 'owner':
+      raise PermissionDenied("Solo propietarios pueden invitar")
+  ```
+
+### 3. Gestión de Inventario Inmutable (Kárdex)
+- **Capacidad**: InventoryMovement es read-only, auto-creado por otros modelos
+- **Tracking**: stock_before/stock_after para auditoría
+- **Tipos**: SALE, PURCHASE, ADJUSTMENT, RETURN
+- **Endpoint**: GET `/inventory/movements/` (read-only)
+
+### 4. Órdenes de Compra Atómicas
+- **Capacidad**: mark_received action actualiza stock + crea InventoryMovements
+- **Atomicidad**: `@transaction.atomic()` garantiza consistencia
+- **Endpoint**: POST `/expenses/purchase-orders/{id}/mark_received/`
+- **Lado Efecto**: Incrementa product.current_stock y crea InventoryMovement
+
+### 5. Gestión de Caja (Cash Shifts)
+- **Capacidad**: Turnos diarios con movimientos IN/OUT
+- **Endpoints**:
+  - POST `/expenses/cash-shifts/` - Abrir turno
+  - POST `/expenses/cash-shifts/{id}/close/` - Cerrar turno
+  - POST `/expenses/cash-movements/` - Registrar movimiento
+- **Validación**: is_open property previene operaciones en turno cerrado
+
+### 6. Carrito en Tiempo Real (WebSocket-Ready)
+- **Capacidad**: ActiveCart + CartItem preparado para Pusher
+- **Session Tracking**: session_id para canales de Pusher
+- **Endpoints**:
+  - POST `/carts/` - Crear carrito
+  - POST `/carts/{id}/add_item/` - Agregar producto
+  - POST `/carts/{id}/remove_item/` - Quitar producto
+  - POST `/carts/{id}/clear/` - Vaciar carrito
+- **WebSocket**: Ready para broadcast en cambios de items
+
+### 7. Códigos de Producto (Escaneo)
+- **Capacidad**: Múltiples códigos por producto (EAN13, QR, UPC, SHELF_LABEL)
+- **Endpoints**: 
+  - GET `/products/codes/?product_id={id}` - Listar códigos
+  - POST `/products/codes/` - Crear código (para escaneo)
+
+### 8. Empaques/Presentaciones
+- **Capacidad**: Definir unidades de empaque (ej: Caja con 50 unidades)
+- **Endpoints**:
+  - GET `/products/packagings/?product_id={id}`
+  - POST `/products/packagings/` - Crear presentación
+
+### 9. Filtrado Inteligente de Productos
+- **low_stock**: GET `/products/products/low_stock/?threshold=10`
+- **out_of_stock**: GET `/products/products/out_of_stock/`
+- **by_category**: Query param `?category={id}`
+- **search**: Query param `?search=iphone`
+
+### 10. Estado Automático de Ventas
+- **PAID**: Cuando `amount_paid >= total_amount`
+- **PARTIAL**: Cuando `0 < amount_paid < total_amount`
+- **CANCELLED**: Manual via PATCH
+- **Auto-update**: SalePaymentViewSet actualiza Sale.status al agregar pago
+
+---
+
+## 📋 Workflow para Nuevas Características (V2)
 
 ### 1. Planificación (SIEMPRE PRIMERO)
 ```markdown
-Antes de implementar, estructura el plan:
+Estructura tu plan antes de codificar:
 
 **Objetivo**: [qué se busca lograr]
 **Contexto**: [qué app/apps afecta]
+**Multi-tenancy**: [¿requiere store FK? ¿queryset filtering?]
 **Cambios**:
-  - Models: [qué modelos se crean/modifican]
-  - Serializers: [qué serializers se actualizan]
-  - Views: [qué endpoints se agregan]
+  - Models: [qué modelos se crean/modifican + store FK]
+  - Serializers: [qué serializers se actualizan + nested relationships]
+  - Views: [qué endpoints se agregan, custom @actions]
   - Tests: [qué tests se agregan]
-  - Migrations: [migrations necesarias]
-**Riesgos**: [qué podría salir mal]
-**Validación**: [cómo verificar que funciona]
+  - Migrations: [migrations necesarias, UUID defaults]
+  - Atomic Ops: [¿transaction.atomic() needed?]
+**Riesgos**: [qué podría salir mal con multi-tenancy o atomic ops]
+**Validación**: [cómo verificar que funciona + queryset isolation]
 ```
 
-### 2. Implementación
-- Crear migrations inmediatamente
-- Escribir tests primero (TDD)
-- Implementar código
-- Ejecutar tests locales
-- Hacer git commit
+### 2. Implementación - Checklist V2
+- ✅ Asegurar **store FK** en todos los modelos de dominio (excepto User/Client)
+- ✅ Implementar **queryset filtering** por user's stores en ViewSet `.get_queryset()`
+- ✅ Usar **@transaction.atomic()** para operaciones complejas (mark_received, close_shift)
+- ✅ Crear **snapshot fields** (unit_price_at_time, unit_cost, stock_before/after)
+- ✅ Hacer UUID con `default=uuid.uuid4` en modelos
+- ✅ Escribir tests TDD + tests de multi-tenancy isolation
+- ✅ Hacer git commit descriptivo
 
 ### 3. Actualización de Documentación
-- Actualizar ARCHITECTURE.md si hay cambios de modelos
-- Actualizar API_ENDPOINTS.md si hay nuevos endpoints
-- Actualizar este AGENT.md si hay cambios en workflow
+- Actualizar ARCHITECTURE_NURAX_V2.md si hay cambios de modelos
+- Actualizar API_ENDPOINTS.md con nuevos endpoints (incluir ejemplo request/response)
+- Actualizar este AGENT.md si hay nuevos skills
+- Actualizar README.md si hay cambios de setup
+
+---
+
+## 📋 Modelos Clave - ARCHITECTURE_V2
+
+### User (accounts)
+```python
+id: UUID, email (USERNAME_FIELD), first_name, last_name
+is_active, is_staff, created_at, updated_at
+# NO tiene role directo - roles en StoreMembership
+# FK: StoreMembership.user (relación inversa)
+```
+
+### Store (accounts) - Centro de Multi-tenancy
+```python
+id: UUID, name, plan: str (basico/pro), tax_id, active, created_at, updated_at
+# ¡CRÍTICO! FK en todos los modelos de dominio
+# Ejemplo: Product.store, Sale.store, Expense.store
+```
+
+### StoreMembership (accounts) - Control de Acceso
+```python
+id: UUID, store: FK, user: FK, role: str (owner/manager/cashier)
+created_at, updated_at
+unique_together = (store, user)  # Un usuario, un rol por tienda
+# Valida: owner puede invitar, manager puede crear órdenes, cashier puede vender
+```
+
+### Product (products)
+```python
+id: UUID, store: FK, category: FK, supplier: FK
+name, base_cost (Decimal), sale_price (Decimal), current_stock (int)
+created_at, updated_at
+# Validación: base_cost < sale_price
+# Snapshot: precios guardados en SaleItem al vender
+# FKs: ProductPackaging, ProductCode (relación inversa)
+```
+
+### Sale (sales)
+```python
+id: UUID, store: FK, customer: FK (optional), cash_shift: FK
+status: PAID/PARTIAL/CANCELLED (TextChoices)
+total_amount (Decimal), amount_paid (Decimal)
+balance_due (property): total_amount - amount_paid
+created_at, updated_at
+# Auto-update status en SalePaymentViewSet
+# balance_due != 0 → PARTIAL, balance_due == 0 → PAID
+```
+
+### InventoryMovement (inventory) - READ-ONLY Kárdex
+```python
+id: UUID, product: FK, user: FK
+movement_type: SALE/PURCHASE/ADJUSTMENT/RETURN (TextChoices)
+quantity (int), stock_before (Decimal), stock_after (Decimal)
+created_at
+# ¡NUNCA se crea directamente! Auto-creado por:
+#   - Sales → SALE type
+#   - PurchaseOrder.mark_received → PURCHASE type
+#   - Manual adjustments → ADJUSTMENT type
+# ViewSet: ReadOnlyModelViewSet (solo GET)
+```
+
+### CashShift (expenses)
+```python
+id: UUID, store: FK, opened_by: FK (user)
+opened_at, closed_at (NULL while open), starting_cash (Decimal)
+is_open (property): return closed_at is None
+# Validación: Solo un turno abierto por tienda
+# close_shift action calcula diferencias
+```
+
+### PurchaseOrder (expenses)
+```python
+id: UUID, store: FK, supplier: FK
+status: PENDING/RECEIVED/CANCELLED (TextChoices)
+total_cost (Decimal), created_at, updated_at
+# mark_received action:
+#   - Usa @transaction.atomic()
+#   - Por cada PurchaseOrderItem: product.current_stock += item.quantity
+#   - Crea InventoryMovement con movement_type=PURCHASE
+# Validación: Solo PENDING pueden ser received
+```
+
+### ActiveCart (carts) - WebSocket-Ready
+```python
+id: UUID, store: FK, user: FK, session_id (unique)
+total_temp (Decimal), updated_at
+# session_id usado como canal Pusher: carts.session_key
+# CartItem (relación inversa) con quantity + unit_price_at_time
+# Actions: add_item, remove_item, clear (recalculan total_temp)
+```
 
 ---
 
@@ -379,10 +555,12 @@ Antes de hacer commit, verificar:
 
 ## Última Actualización
 
-**Fecha**: Marzo 26, 2026
-**Versión**: 2.0 (Post-Refactorización DDD)
-**Tests**: 60/60 ✅
-**Coverage**: Modelos, Serializers, Views, Integración
+**Fecha**: Marzo 2025
+**Versión**: 3.0 (ARCHITECTURE_V2 Multi-Tenant)
+**Models**: 25+ modelos con UUID + multi-tenancy
+**ViewSets**: 20+ ViewSets con filtering/search/custom actions
+**Apps**: 6 apps + api shared
+**Skills**: 10+ capacidades documentadas
 
 # Construir imágenes y levantar contenedores
 docker-compose up --build

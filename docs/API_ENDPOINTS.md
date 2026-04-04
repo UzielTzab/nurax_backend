@@ -1,14 +1,28 @@
-# API Endpoints - Nurax Backend
+# API Endpoints - Nurax Backend ARCHITECTURE_V2
 
-Listado completo de endpoints de la API REST. Todos requieren autenticación con JWT.
+Documentación completa de la API REST. Todos los endpoints requieren autenticación JWT (excepto login).
+
+**Base URL:** `http://localhost:8000/api/v1/`
+
+---
+
+## 📋 Tabla de Contenidos
+
+1. [Autenticación](#autenticación)
+2. [Accounts (Usuarios, Tiendas, Membresías)](#accounts)
+3. [Products (Catálogo)](#products)
+4. [Sales (Ventas)](#sales)
+5. [Inventory (Kárdex)](#inventory)
+6. [Expenses (Caja, Gastos, Compras)](#expenses)
+7. [Carts (Carrito en Tiempo Real)](#carts)
 
 ---
 
 ## Autenticación
 
-### **Obtener Tokens JWT**
+### Obtener Tokens JWT
 
-**POST** `/api/token/`
+**POST** `/auth/login/`
 
 ```json
 {
@@ -17,7 +31,7 @@ Listado completo de endpoints de la API REST. Todos requieren autenticación con
 }
 ```
 
-**Respuesta (200):**
+**Response (200):**
 ```json
 {
   "access": "eyJ0eXAiOiJKV1QiLCJhbGc...",
@@ -25,9 +39,9 @@ Listado completo de endpoints de la API REST. Todos requieren autenticación con
 }
 ```
 
-### **Refrescar Token**
+### Refrescar Token
 
-**POST** `/api/token/refresh/`
+**POST** `/auth/refresh/`
 
 ```json
 {
@@ -35,469 +49,457 @@ Listado completo de endpoints de la API REST. Todos requieren autenticación con
 }
 ```
 
-**Respuesta (200):**
+---
+
+## Accounts
+
+### Usuarios
+
+#### Get Current User Profile
+**GET** `/accounts/users/me/`
+
+**Response (200):**
 ```json
 {
-  "access": "eyJ0eXAiOiJKV1QiLCJhbGc..."
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "username": "john_doe",
+  "email": "john@example.com",
+  "first_name": "John",
+  "last_name": "Doe",
+  "is_active": true
+}
+```
+
+#### Update User Profile
+**PATCH** `/accounts/users/me/`
+
+```json
+{
+  "first_name": "Juan",
+  "last_name": "García"
+}
+```
+
+#### Change Password
+**PATCH** `/accounts/users/change_password/`
+
+```json
+{
+  "current_password": "oldpass123",
+  "new_password": "newpass456",
+  "confirm_password": "newpass456"
 }
 ```
 
 ---
 
-## Users
+### Tiendas (Stores)
 
-### **List/Create Users**
+#### List My Stores
+**GET** `/accounts/stores/`
 
-- **GET** `/api/users/` - Listar usuarios (solo admin)
-- **POST** `/api/users/` - Crear usuario (registro)
+Obtiene todas las tiendas donde el usuario es miembro.
 
-**POST Body:**
+**Response (200):**
+```json
+[
+  {
+    "id": "123e4567-e89b-12d3-a456-426614174000",
+    "name": "Electrónica Nurax",
+    "plan": "pro",
+    "tax_id": "J-12345678-9",
+    "active": true,
+    "created_at": "2024-01-15T10:30:00Z",
+    "updated_at": "2024-03-01T14:20:00Z"
+  }
+]
+```
+
+#### Store Detail (con membresías)
+**GET** `/accounts/stores/{store_id}/`
+
+---
+
+### Membresías de Tienda (StoreMemberships)
+
+#### List Store Members
+**GET** `/accounts/memberships/?store={store_id}`
+
+#### Add Team Member
+**POST** `/accounts/memberships/`
+
 ```json
 {
-  "email": "newuser@example.com",
-  "username": "newuser",
-  "password": "secure123",
-  "name": "Juan Pérez",
-  "role": "cliente"
+  "store": "123e4567-e89b-12d3-a456-426614174000",
+  "user": "550e8400-e29b-41d4-a716-446655440000",
+  "role": "cashier"
 }
 ```
 
-### **Detail/Update/Delete**
+**Roles:** `owner`, `manager`, `cashier`
 
-- **GET** `/api/users/{id}/` - Obtener usuario
-- **PUT** `/api/users/{id}/` - Actualizar usuario
-- **PATCH** `/api/users/{id}/` - Actualizar parcial
-- **DELETE** `/api/users/{id}/` - Eliminar usuario
+---
+
+### Clientes (Customers)
+
+#### List Clients
+**GET** `/accounts/clients/`
+
+#### Create Client
+**POST** `/accounts/clients/`
+
+```json
+{
+  "name": "María López",
+  "credit_limit": 10000.00
+}
+```
 
 ---
 
 ## Products
 
-### **List/Create Products**
+### Categorías
 
-**GET** `/api/products/` - Listar productos del usuario actual
+#### List Categories
+**GET** `/products/categories/?store_id={store_id}`
 
-**Parámetros query:**
-- `?category=Electrónica` - Filtrar por categoría
-- `?status=in_stock` - Filtrar por stock (in_stock, low_stock, out_of_stock)
-- `?search=iphone` - Buscar por nombre
-- `?page=2` - Paginación
-- `?page_size=50` - Cambiar tamaño página
-
-**POST** `/api/products/` - Crear producto
+#### Create Category
+**POST** `/products/categories/`
 
 ```json
 {
-  "name": "iPhone 15 Pro",
-  "category": 1,
-  "supplier": 2,
-  "sku": "IPHONE-15-PRO",
-  "stock": 5,
-  "price": "1299.99",
-  "image_url": "https://cloudinary.com/image.jpg"
-}
-```
-
-### **Detail/Update/Delete**
-
-- **GET** `/api/products/{id}/` - Obtener producto
-- **PUT** `/api/products/{id}/` - Actualizar producto
-- **PATCH** `/api/products/{id}/` - Actualizar parcial (útil para stock)
-- **DELETE** `/api/products/{id}/` - Eliminar producto
-
-**PATCH Body (actualizar solo stock):**
-```json
-{
-  "stock": 10
-}
-```
-
----
-
-## Categories
-
-### **List/Create**
-
-- **GET** `/api/categories/` - Listar categorías
-- **POST** `/api/categories/` - Crear categoría
-
-**POST Body:**
-```json
-{
+  "store": "123e4567-e89b-12d3-a456-426614174000",
   "name": "Electrónica"
 }
 ```
 
-### **Detail/Update/Delete**
-
-- **GET** `/api/categories/{id}/`
-- **PUT** `/api/categories/{id}/`
-- **DELETE** `/api/categories/{id}/`
-
 ---
 
-## Suppliers
+### Proveedores
 
-### **List/Create Suppliers**
+#### List Suppliers
+**GET** `/products/suppliers/?store_id={store_id}`
 
-**GET** `/api/suppliers/` - Listar proveedores del usuario
-
-**POST** `/api/suppliers/` - Crear proveedor
+#### Create Supplier
+**POST** `/products/suppliers/`
 
 ```json
 {
-  "name": "TechWholesale Inc",
-  "email": "contact@techwholesale.com",
-  "phone": "+1-800-TECH",
-  "company": "TechWholesale"
+  "store": "123e4567-e89b-12d3-a456-426614174000",
+  "name": "ProTech Importaciones",
+  "contact_info": "+58-212-1234567"
 }
 ```
 
-### **Detail/Update/Delete**
-
-- **GET** `/api/suppliers/{id}/`
-- **PUT** `/api/suppliers/{id}/`
-- **PATCH** `/api/suppliers/{id}/`
-- **DELETE** `/api/suppliers/{id}/`
-
 ---
 
-## Clients
+### Productos
 
-### **List/Create Clients**
+#### List Products
+**GET** `/products/products/?store_id={store_id}`
 
-**GET** `/api/clients/` - Listar clientes (admin/owner)
+**Query Parameters:**
+- `?category={id}` - Filtrar por categoría
+- `?supplier={id}` - Filtrar por proveedor
+- `?search=iphone` - Buscar por nombre
 
-**POST** `/api/clients/` - Crear cliente
-
-⚠️ **IMPORTANTE**: Al crear un cliente se crea automáticamente una cuenta de usuario con:
-- **email**: igual al email del cliente
-- **username**: igual al email del cliente
-- **password**: `nurax123` (se recomienda cambiar en el primer acceso)
-- **role**: `cliente`
-- **name**: nombre del cliente
-
+**Response (200):**
 ```json
 {
-  "name": "Carlos López",
-  "email": "carlos@example.com",
-  "company": "Tienda XYZ",
-  "plan": "pro",
-  "avatar_color": "#FF5733"
-}
-```
-
-**Respuesta (201) - Nota que incluye usuario creado:**
-```json
-{
-  "id": 1,
-  "name": "Carlos López",
-  "email": "carlos@example.com",
-  "company": "Tienda XYZ",
-  "plan": "pro",
-  "active": true,
-  "created_at": "2024-01-15T10:30:00Z",
-  "user": {
-    "id": 15,
-    "email": "carlos@example.com",
-    "name": "Carlos López",
-    "role": "cliente",
-    "avatar_url": null,
-    "is_active": true
-  }
-}
-```
-
-### **Detail/Update/Delete**
-
-- **GET** `/api/clients/{id}/`
-- **PUT** `/api/clients/{id}/` - Actualizar cliente
-- **DELETE** `/api/clients/{id}/`
-
----
-
-## Sales (Ventas)
-
-### **List/Create Sales**
-
-**GET** `/api/sales/` - Listar ventas del usuario
-
-**Parámetros query:**
-- `?status=completed` - Filtrar por estado
-- `?created_at__gte=2024-01-01` - Ventas desde fecha
-
-**POST** `/api/sales/` - Crear venta
-
-```json
-{
-  "status": "completed",
-  "total": "499.98",
-  "customer_name": "Juan Pérez",
-  "customer_phone": "555-1234",
-  "amount_paid": "499.98",
-  "items": [
+  "count": 150,
+  "results": [
     {
-      "product": 5,
-      "product_name": "iPhone 15",
-      "quantity": 1,
-      "unit_price": "999.99"
+      "id": "prod-001",
+      "store": "123e4567-e89b-12d3-a456-426614174000",
+      "name": "iPhone 15 Pro",
+      "base_cost": 800.00,
+      "sale_price": 1299.99,
+      "current_stock": 5,
+      "category": "cat-001",
+      "supplier": "sup-001",
+      "packagings": [],
+      "codes": []
     }
   ]
 }
 ```
 
-### **Detail/Update**
+#### Create Product
+**POST** `/products/products/`
 
-- **GET** `/api/sales/{id}/` - Obtener venta con items y pagos
-- **PUT** `/api/sales/{id}/` - Actualizar venta
-- **PATCH** `/api/sales/{id}/` - Actualizar estado
-
-**PATCH Body (cambiar estado):**
 ```json
 {
-  "status": "completed"
+  "store": "123e4567-e89b-12d3-a456-426614174000",
+  "name": "Samsung Galaxy S24",
+  "category": "cat-001",
+  "supplier": "sup-002",
+  "base_cost": 600.00,
+  "sale_price": 999.99,
+  "current_stock": 10
 }
 ```
 
-### **Cancelar Venta**
+#### Low Stock Products
+**GET** `/products/products/low_stock/?store_id={store_id}&threshold=10`
 
-**POST** `/api/sales/{id}/cancel/` - Cancelar una venta
+#### Out of Stock
+**GET** `/products/products/out_of_stock/?store_id={store_id}`
 
 ---
 
-## Sale Items
+### Empaques
 
-### **List/Create**
+#### List Packagings
+**GET** `/products/packagings/?product_id={product_id}`
 
-**GET** `/api/sale-items/` - Listar items de venta
-
-**POST** `/api/sale-items/` - Crear item (se hace normalmente en venta)
+#### Create Packaging
+**POST** `/products/packagings/`
 
 ```json
 {
-  "sale": 1,
-  "product": 5,
-  "product_name": "iPhone 15",
+  "product": "prod-001",
+  "name": "Caja por 50 unidades",
+  "quantity_per_unit": 50
+}
+```
+
+---
+
+### Códigos QR/EAN
+
+#### List Codes
+**GET** `/products/codes/?product_id={product_id}`
+
+#### Create Code
+**POST** `/products/codes/`
+
+```json
+{
+  "product": "prod-001",
+  "code": "5901234123457",
+  "code_type": "ean13"
+}
+```
+
+**Tipos:** `ean13`, `qr`, `upc`, `shelf_label`
+
+---
+
+## Sales
+
+### Ventas
+
+#### List Sales
+**GET** `/sales/sales/?store_id={store_id}`
+
+#### Create Sale
+**POST** `/sales/sales/`
+
+```json
+{
+  "store": "123e4567-e89b-12d3-a456-426614174000",
+  "cash_shift": "shift-001",
+  "customer": null,
+  "status": "paid",
+  "total_amount": 1500.00,
+  "amount_paid": 1500.00
+}
+```
+
+#### Pending Payments
+**GET** `/sales/sales/pending_payments/`
+
+---
+
+### Items de Venta
+
+#### Create Sale Item
+**POST** `/sales/items/`
+
+```json
+{
+  "sale": "sale-001",
+  "product": "prod-001",
   "quantity": 2,
-  "unit_price": "999.99"
-}
-```
-
-### **Detail/Update**
-
-- **GET** `/api/sale-items/{id}/`
-- **PUT** `/api/sale-items/{id}/`
-- **DELETE** `/api/sale-items/{id}/`
-
----
-
-## Sale Payments (Abonos)
-
-### **List/Create Payments**
-
-**GET** `/api/sale-payments/` - Listar pagos
-
-**POST** `/api/sale-payments/` - Registrar pago/abono
-
-```json
-{
-  "sale": 3,
-  "amount": "250.00"
-}
-```
-
-Esto:
-1. Crea un SalePayment record
-2. Actualiza sale.amount_paid
-3. Calcula automáticamente balance_due
-
-### **Detail**
-
-- **GET** `/api/sale-payments/{id}/`
-- **DELETE** `/api/sale-payments/{id}/` - Revertir pago
-
----
-
-## Inventory Transactions (Kárdex)
-
-### **List/Create**
-
-**GET** `/api/inventory-transactions/` - Histórico de movimientos
-
-**POST** `/api/inventory-transactions/` - Registrar movimiento
-
-```json
-{
-  "product": 5,
-  "transaction_type": "adjustment",
-  "quantity": 10,
-  "reason": "Conteo físico - ajuste encontrado"
-}
-```
-
-**transaction_type opciones:**
-- `in` - Entrada (compra a proveedor)
-- `out` - Salida (venta/manual)
-- `adjustment` - Ajuste de inventario
-- `waste` - Merma/dañado
-
----
-
-## Inventory Movements (Movimientos Detallados)
-
-### **List/Create**
-
-**GET** `/api/inventory-movements/` - Movimientos con costos
-
-**POST** `/api/inventory-movements/` - Crear movimiento
-
-```json
-{
-  "product": 5,
-  "movement_type": "restock",
-  "quantity": 50,
-  "unit_cost": "450.00",
-  "cash_shift": 1,
-  "notes": "Reabastecimiento proveedor principal"
-}
-```
-
-**movement_type opciones:**
-- `sale` - Venta
-- `restock` - Reabastecimiento
-- `adjust` - Ajuste inventario
-
-### **Detail/Update**
-
-- **GET** `/api/inventory-movements/{id}/`
-- **PATCH** `/api/inventory-movements/{id}/` - Actualizar notas
-
----
-
-## Expenses (Gastos)
-
-### **List/Create**
-
-**GET** `/api/expenses/` - Listar gastos
-
-**POST** `/api/expenses/` - Registrar gasto
-
-```json
-{
-  "amount": "150.00",
-  "category": "servicios",
-  "description": "Pago factura de internet",
-  "supplier": 2,
-  "cash_shift": 1,
-  "receipt_url": "https://cloudinary.com/receipt.pdf"
-}
-```
-
-**category opciones:**
-- `servicios` - Servicios (Luz, Agua, Internet)
-- `nomina` - Nómina/Sueldos
-- `proveedores` - Pago a Proveedores
-- `inventario` - Reabastecimiento
-- `varios` - Gastos Varios
-
-### **Detail/Update**
-
-- **GET** `/api/expenses/{id}/`
-- **PUT** `/api/expenses/{id}/`
-- **DELETE** `/api/expenses/{id}/`
-
----
-
-## Cash Shifts (Cortes de Caja)
-
-### **List/Create**
-
-**GET** `/api/cash-shifts/` - Listar cortes
-
-**POST** `/api/cash-shifts/` - Abrir turno
-
-```json
-{
-  "starting_cash": "500.00"
-}
-```
-
-### **Detail**
-
-**GET** `/api/cash-shifts/{id}/` - Ver detalle turno (incluye movimientos y gastos)
-
-### **Cerrar Turno**
-
-**POST** `/api/cash-shifts/{id}/close/`
-
-```json
-{
-  "actual_cash": "645.50"
-}
-```
-
-Esto calcula automáticamente:
-- `expected_cash` = starting_cash + ventas - gastos
-- `difference` = actual_cash - expected_cash
-
----
-
-## Store Profile
-
-### **Get/Update**
-
-**GET** `/api/store-profile/` - Obtener configuración tienda actual
-
-**PUT** `/api/store-profile/` - Actualizar configuración
-
-```json
-{
-  "store_name": "Mi Tienda Tech",
-  "currency_symbol": "$",
-  "address": "Calle 5 #123",
-  "phone": "555-1234",
-  "ticket_message": "¡Gracias por su compra!",
-  "company_name": "Tech Store Inc",
-  "ticket_name": "TIENDA TECH"
-}
-```
-
-### **Marcar Setup Completo**
-
-**PATCH** `/api/store-profile/`
-
-```json
-{
-  "is_first_setup_completed": true
+  "unit_price": 1299.99,
+  "unit_cost": 800.00
 }
 ```
 
 ---
 
-## Active Session Cart
+### Pagos
 
-### **Get/Update**
-
-**GET** `/api/active-session-cart/` - Obtener carrito sesión actual
-
-**PUT** `/api/active-session-cart/`
+#### Register Payment
+**POST** `/sales/payments/`
 
 ```json
 {
-  "cart_data": [
-    {
-      "product_id": 5,
-      "product_name": "iPhone 15",
-      "quantity": 2,
-      "unit_price": "999.99"
-    }
-  ]
+  "sale": "sale-001",
+  "cash_shift": "shift-001",
+  "amount": 500.00
 }
 ```
 
 ---
 
-## Documentación Interactiva
+## Inventory
+
+### Movimientos de Inventario (Kárdex - Solo lectura)
+
+**GET** `/inventory/movements/`
+
+**Filtros:**
+- `?product={id}` - Por producto
+- `?movement_type=sale` - Por tipo
+- `?ordering=-created_at` - Ordenar
+
+---
+
+## Expenses
+
+### Turnos de Caja
+
+#### Open Cash Shift
+**POST** `/expenses/cash-shifts/`
+
+```json
+{
+  "store": "123e4567-e89b-12d3-a456-426614174000",
+  "opened_by": "550e8400-e29b-41d4-a716-446655440000",
+  "starting_cash": 500.00
+}
+```
+
+#### Current Open Shift
+**GET** `/expenses/cash-shifts/current_open/?store_id={store_id}`
+
+#### Close Shift
+**POST** `/expenses/cash-shifts/{shift_id}/close/`
+
+---
+
+### Movimientos de Caja
+
+#### Record Movement
+**POST** `/expenses/cash-movements/`
+
+```json
+{
+  "cash_shift": "shift-001",
+  "movement_type": "out",
+  "amount": 50.00,
+  "reason": "Pago servicios"
+}
+```
+
+---
+
+### Categorías de Gasto
+
+#### Create Category
+**POST** `/expenses/expense-categories/`
+
+```json
+{
+  "store": "123e4567-e89b-12d3-a456-426614174000",
+  "name": "Servicios Públicos"
+}
+```
+
+---
+
+### Gastos
+
+#### List Expenses
+**GET** `/expenses/expenses/?store_id={store_id}`
+
+#### Register Expense
+**POST** `/expenses/expenses/`
+
+```json
+{
+  "store": "123e4567-e89b-12d3-a456-426614174000",
+  "category": "cat-001",
+  "amount": 150.00,
+  "description": "Pago factura",
+  "payment_method": "transfer"
+}
+```
+
+---
+
+### Órdenes de Compra
+
+#### List Purchase Orders
+**GET** `/expenses/purchase-orders/?store_id={store_id}`
+
+#### Create Purchase Order
+**POST** `/expenses/purchase-orders/`
+
+```json
+{
+  "store": "123e4567-e89b-12d3-a456-426614174000",
+  "supplier": "sup-001",
+  "status": "pending",
+  "total_cost": 5000.00
+}
+```
+
+#### Mark as Received
+**POST** `/expenses/purchase-orders/{order_id}/mark_received/`
+
+---
+
+## Carts
+
+### Carrito Activo
+
+#### Create Cart
+**POST** `/carts/carts/`
+
+```json
+{
+  "store": "123e4567-e89b-12d3-a456-426614174000",
+  "user": "550e8400-e29b-41d4-a716-446655440000",
+  "session_id": "unique-session-id"
+}
+```
+
+#### Add Item
+**POST** `/carts/carts/{cart_id}/add_item/`
+
+```json
+{
+  "product": "prod-001",
+  "quantity": 1,
+  "unit_price_at_time": 1299.99
+}
+```
+
+#### Remove Item
+**POST** `/carts/carts/{cart_id}/remove_item/`
+
+```json
+{
+  "item_id": "item-001"
+}
+```
+
+#### Clear Cart
+**POST** `/carts/carts/{cart_id}/clear/`
+
+---
+
+## Status Codes
+
+- `200 OK` - Éxito
+- `201 Created` - Creado
+- `400 Bad Request` - Datos inválidos
+- `401 Unauthorized` - No autenticado
+- `403 Forbidden` - No autorizado
+- `404 Not Found` - No existe
 
 - **Swagger UI**: `/api/docs/` (interfaz gráfica)
 - **ReDoc**: `/api/redoc/` (documentación UI alternativa)

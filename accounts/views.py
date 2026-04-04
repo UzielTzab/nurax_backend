@@ -1,50 +1,43 @@
 """
 Vistas para la app Accounts.
+ARCHITECTURE_V2: Usuarios, tiendas, membresías y clientes.
 """
-from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
+from rest_framework import viewsets, status
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from .models import User, Client, StoreProfile
-from .serializers import UserSerializer, ClientSerializer, StoreProfileSerializer
+from .models import User, Store, StoreMembership, Client
+from .serializers import (
+    UserSerializer, StoreSerializer, StoreMembershipSerializer,
+    ClientSerializer, StoreWithMembershipsSerializer
+)
 
 User = get_user_model()
 
-# Contraseña por defecto para nuevos clientes
-DEFAULT_CLIENT_PASSWORD = 'nurax123'
 
-
-class UserViewSet(viewsets.ModelViewSet):
-    """ViewSet para usuarios."""
+class UserViewSet(viewsets.ViewSet):
+    """ViewSet para usuarios (solo lectura del perfil)."""
     
     permission_classes = [IsAuthenticated]
-    serializer_class = UserSerializer
     
-    def get_queryset(self):
-        return User.objects.filter(id=self.request.user.id)
-    
-    @action(detail=False, methods=['GET', 'PATCH'], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['GET', 'PATCH'])
     def me(self, request):
-        """Obtiene o actualiza el perfil del usuario actual (incluido avatar)."""
+        """Obtiene o actualiza el perfil del usuario actual."""
         user = request.user
         
         if request.method == 'PATCH':
-            # Manejo de archivo avatar si existe
-            if 'avatar_file' in request.FILES:
-                user.avatar_url = request.FILES['avatar_file']
-            
-            # Actualizar otros campos si los hay
-            serializer = self.get_serializer(user, data=request.data, partial=True)
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
-            return Response(serializer.data)
+            serializer = UserSerializer(user, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
-        serializer = self.get_serializer(user)
+        serializer = UserSerializer(user)
         return Response(serializer.data)
     
-    @action(detail=False, methods=['PATCH'], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['PATCH'])
     def change_password(self, request):
         """Cambia la contraseña del usuario actual."""
         user = request.user
@@ -56,82 +49,107 @@ class UserViewSet(viewsets.ModelViewSet):
         # Validar que todos los campos estén presentes
         if not current_password or not new_password or not confirm_password:
             return Response(
-                {'detail': 'current_password, new_password y confirm_password son requeridos'},
-                status=400
+                {'error': 'current_password, new_password y confirm_password son requeridos'},
+                status=status.HTTP_400_BAD_REQUEST
             )
         
         # Verificar que la contraseña actual sea correcta
         if not user.check_password(current_password):
             return Response(
-                {'detail': 'La contraseña actual es incorrecta'},
-                status=400
+                {'error': 'La contraseña actual es incorrecta'},
+                status=status.HTTP_401_UNAUTHORIZED
             )
         
         # Verificar que las contraseñas nuevas coincidan
         if new_password != confirm_password:
             return Response(
-                {'detail': 'Las contraseñas nuevas no coinciden'},
-                status=400
+                {'error': 'Las contraseñas nuevas no coinciden'},
+                status=status.HTTP_400_BAD_REQUEST
             )
         
         # Cambiar la contraseña
         user.set_password(new_password)
         user.save()
         
-        return Response(
-            {'detail': 'Contraseña actualizada correctamente', 'success': True}
-        )
+        return Response({'message': 'Contraseña actualizada correctamente'})
 
 
-class ClientViewSet(viewsets.ModelViewSet):
-    """ViewSet para clientes.
-    
-    Al crear un cliente, se crea automáticamente un usuario para que pueda acceder al sistema.
-    Usuario creado:
-      - email: igual al email del cliente
-      - username: igual al email del cliente
-      - password: "nurax123" (recomendado cambiar en primer login)
-      - role: 'cliente'
-      - name: nombre del cliente
-    """
+class StoreViewSet(viewsets.ModelViewSet):
+    """ViewSet para tiendas."""
     
     permission_classes = [IsAuthenticated]
-    queryset = Client.objects.all()
-    serializer_class = ClientSerializer
+    serializer_class = StoreSerializer
+    queryset = Store.objects.all()
+    
+    def get_queryset(self):
+        """Filtrar tiendas donde el usuario es miembro."""
+        user = self.request.user
+        # Obtener todas las tiendas donde el usuario tiene membresía
+        store_ids = StoreMembership.objects.filter(
+            user=user
+        ).values_list('store_id', flat=True)
+        return Store.objects.filter(id__in=store_ids)
+    
+    def get_serializer_class(self):
+        """Usar serializer con membresías en el detalle."""
+        if self.action == 'retrieve':
+            return StoreWithMembershipsSerializer
+        return self.serializer_class
+    
+    @action(detail=True, methods=['GET'])
+    def memberships(self, request, pk=None):
+        """Obtener membresías de una tienda."""
+        store = self.get_object()
+        memberships = StoreMembership.objects.filter(store=store)
+        serializer = StoreMembershipSerializer(memberships, many=True)
+        return Response(serializer.data)
+
+
+class StoreMembershipViewSet(viewsets.ModelViewSet):
+    """ViewSet para membresías de tienda."""
+    
+    permission_classes = [IsAuthenticated]
+    serializer_class = StoreMembershipSerializer
+    queryset = StoreMembership.objects.all()
+    
+    def get_queryset(self):
+        """Filtrar membresías donde el usuario es propietario o gerente."""
+        user = self.request.user
+        # El usuario solo puede ver membresías de tiendas donde es propietario
+        owner_stores = StoreMembership.objects.filter(
+            user=user,
+            role=StoreMembership.Role.OWNER
+        ).values_list('store_id', flat=True)
+        return StoreMembership.objects.filter(store_id__in=owner_stores)
     
     @transaction.atomic
     def perform_create(self, serializer):
-        """Crea un cliente y su usuario asociado automáticamente.
+        """Crear membresía (solo propietarios pueden hacerlo)."""
+        # Validar que el creador sea propietario de la tienda
+        store = serializer.validated_data['store']
+        user = self.request.user
         
-        Esta operación es atómica: si falla la creación del usuario,
-        se revierte también la creación del cliente.
+        is_owner = StoreMembership.objects.filter(
+            store=store,
+            user=user,
+            role=StoreMembership.Role.OWNER
+        ).exists()
         
-        Args:
-            serializer: ClientSerializer con datos validados
-            
-        Raises:
-            ValidationError: Si el email ya existe en User o Client
-        """
-        client_data = serializer.validated_data
+        if not is_owner:
+            raise PermissionError("Solo los propietarios pueden agregar miembros")
         
-        # Crear usuario
-        user = User.objects.create_user(
-            email=client_data['email'],
-            username=client_data['email'],
-            password=DEFAULT_CLIENT_PASSWORD,
-            name=client_data['name'],
-            role=User.Role.CLIENTE
-        )
-        
-        # Guardar cliente con usuario asociado
-        serializer.save(user=user)
+        serializer.save()
 
 
-class StoreProfileViewSet(viewsets.ModelViewSet):
-    """ViewSet para perfiles de tienda."""
+class ClientViewSet(viewsets.ModelViewSet):
+    """ViewSet para clientes."""
     
     permission_classes = [IsAuthenticated]
-    serializer_class = StoreProfileSerializer
+    serializer_class = ClientSerializer
+    queryset = Client.objects.all()
     
     def get_queryset(self):
-        return StoreProfile.objects.filter(user=self.request.user)
+        """Los clientes están asociados a tiendas, no filtrados por usuario."""
+        # En la arquitectura V2, los clientes no tienen referencia a usuario
+        # solo a tienda (implícita). Por ahora retornamos todos.
+        return Client.objects.all()

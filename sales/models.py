@@ -1,76 +1,70 @@
 """
 Modelos para la app Sales - Ventas, items y pagos.
+ARCHITECTURE_V2: Ventas, créditos y control de flujo de caja.
 """
 from decimal import Decimal
 from django.db import models
 from django.core.validators import MinValueValidator
-from accounts.models import User
-from products.models import Product
-from .managers import SaleManager
+import uuid
 
 
 class Sale(models.Model):
     """Transacción de venta."""
     
     class Status(models.TextChoices):
-        COMPLETED = 'completed', 'Completada'
-        PENDING = 'pending', 'Pendiente'
+        PAID = 'paid', 'Pagada'
+        PARTIAL = 'partial', 'Pago Parcial'
         CANCELLED = 'cancelled', 'Cancelada'
-        CREDIT = 'credit', 'Crédito'
-        LAYAWAY = 'layaway', 'Apartado'
     
-    transaction_id = models.CharField(
-        max_length=20,
-        unique=True,
-        help_text="ID único de transacción"
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    store = models.ForeignKey(
+        'accounts.Store',
+        on_delete=models.CASCADE,
+        related_name='sales'
     )
-    user = models.ForeignKey(
-        User,
+    cash_shift = models.ForeignKey(
+        'expenses.CashShift',
         on_delete=models.SET_NULL,
         null=True,
-        help_text="Usuario que realizó la venta"
+        blank=True,
+        related_name='sales',
+        help_text="Turno de caja donde se ingresó el dinero"
+    )
+    customer = models.ForeignKey(
+        'accounts.Client',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sales',
+        help_text="Cliente (opcional para venta rápida)"
     )
     status = models.CharField(
         max_length=15,
         choices=Status.choices,
-        default=Status.COMPLETED,
+        default=Status.PAID,
         help_text="Estado de la venta"
     )
-    total = models.DecimalField(
+    total_amount = models.DecimalField(
         max_digits=12,
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.01'))],
-        help_text="Total de la venta"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    customer_name = models.CharField(
-        max_length=200,
-        blank=True,
-        null=True,
-        help_text="Nombre del cliente"
-    )
-    customer_phone = models.CharField(
-        max_length=20,
-        blank=True,
-        null=True,
-        help_text="Teléfono del cliente"
+        help_text="Total a cobrar"
     )
     amount_paid = models.DecimalField(
         max_digits=12,
         decimal_places=2,
-        null=True,
-        blank=True,
-        help_text="Monto pagado"
+        default=0,
+        help_text="Suma de abonos + pago inicial"
     )
-    
-    objects = SaleManager()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'sale'
         verbose_name = "Venta"
         verbose_name_plural = "Ventas"
         indexes = [
-            models.Index(fields=['transaction_id']),
+            models.Index(fields=['store']),
             models.Index(fields=['status']),
             models.Index(fields=['created_at']),
         ]
@@ -78,44 +72,40 @@ class Sale(models.Model):
     @property
     def balance_due(self) -> Decimal:
         """Saldo adeudado."""
-        total_payments = sum(
-            payment.amount for payment in self.payments.all()
-        ) or Decimal('0')
-        if self.status in [self.Status.COMPLETED, self.Status.CANCELLED]:
-            return Decimal('0')
-        return self.total - total_payments
+        return self.total_amount - self.amount_paid
     
     def __str__(self) -> str:
-        return f"{self.transaction_id} — ${self.total}"
+        return f"Venta {self.id} — ${self.total_amount}"
 
 
 class SaleItem(models.Model):
-    """Item dentro de una venta."""
+    """Producto dentro de una venta."""
     
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     sale = models.ForeignKey(
         Sale,
         on_delete=models.CASCADE,
-        related_name='items',
-        help_text="Venta asociada"
+        related_name='items'
     )
     product = models.ForeignKey(
-        Product,
+        'products.Product',
         on_delete=models.SET_NULL,
         null=True,
-        help_text="Producto vendido"
+        related_name='sale_items'
     )
-    product_name = models.CharField(
-        max_length=250,
-        help_text="Snapshot del nombre del producto"
-    )
-    quantity = models.PositiveIntegerField(
-        help_text="Cantidad vendida"
-    )
+    quantity = models.PositiveIntegerField(help_text="Cantidad vendida")
     unit_price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        help_text="Precio unitario"
+        help_text="Precio unitario al momento de la venta"
     )
+    unit_cost = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Costo unitario al momento de la venta"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'sale_item'
@@ -127,18 +117,31 @@ class SaleItem(models.Model):
         """Subtotal del item."""
         return self.quantity * self.unit_price
     
+    @property
+    def profit(self) -> Decimal:
+        """Ganancia del item."""
+        return (self.unit_price - self.unit_cost) * self.quantity
+    
     def __str__(self) -> str:
-        return f"{self.product_name} x {self.quantity}"
+        product_name = self.product.name if self.product else "Product deleted"
+        return f"{product_name} x {self.quantity}"
 
 
 class SalePayment(models.Model):
     """Pago o abono a una venta."""
     
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     sale = models.ForeignKey(
         Sale,
         on_delete=models.CASCADE,
-        related_name='payments',
-        help_text="Venta asociada"
+        related_name='payments'
+    )
+    cash_shift = models.ForeignKey(
+        'expenses.CashShift',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sale_payments'
     )
     amount = models.DecimalField(
         max_digits=12,
@@ -147,20 +150,16 @@ class SalePayment(models.Model):
         help_text="Monto del abono"
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    user = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        help_text="Usuario que realizó el pago"
-    )
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'sale_payment'
         verbose_name = "Pago de Venta"
         verbose_name_plural = "Pagos de Ventas"
         indexes = [
-            models.Index(fields=['sale', 'created_at']),
+            models.Index(fields=['sale']),
+            models.Index(fields=['created_at']),
         ]
     
     def __str__(self) -> str:
-        return f"Abono ${self.amount} a {self.sale.transaction_id}"
+        return f"Pago ${self.amount}"

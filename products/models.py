@@ -1,28 +1,33 @@
 """
-Modelos para la app Products - Productos, categorías y proveedores.
+Modelos para la app Products - Catálogo, categorías, proveedores y empaques.
+ARCHITECTURE_V2: Estructura completa de productos multi-tienda.
 """
 from django.db import models
 from django.core.validators import MinValueValidator
-from accounts.models import User
-from .validators import validate_sku_format, validate_stock_not_negative, validate_positive_decimal
-from .managers import ProductManager, SupplierManager
+from decimal import Decimal
+import uuid
 
 
 class Category(models.Model):
-    """Categoría de productos."""
+    """Categoría de productos dentro de una tienda."""
     
-    name = models.CharField(
-        max_length=100,
-        unique=True,
-        help_text="Nombre único de la categoría"
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    store = models.ForeignKey(
+        'accounts.Store',
+        on_delete=models.CASCADE,
+        related_name='categories'
     )
+    name = models.CharField(max_length=100, help_text="Nombre de la categoría")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'category'
         verbose_name = "Categoría"
         verbose_name_plural = "Categorías"
+        unique_together = [['store', 'name']]
         indexes = [
-            models.Index(fields=['name']),
+            models.Index(fields=['store']),
         ]
     
     def __str__(self) -> str:
@@ -32,109 +37,149 @@ class Category(models.Model):
 class Supplier(models.Model):
     """Proveedor de productos."""
     
-    user = models.ForeignKey(
-        User,
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    store = models.ForeignKey(
+        'accounts.Store',
         on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        help_text="Usuario asociado"
+        related_name='suppliers'
     )
     name = models.CharField(max_length=200, help_text="Nombre del proveedor")
-    email = models.EmailField(blank=True, help_text="Email del proveedor")
-    phone = models.CharField(max_length=20, blank=True, help_text="Teléfono")
-    company = models.CharField(max_length=200, blank=True, help_text="Empresa")
+    contact_info = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Teléfono, email o datos de contacto"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
-    
-    objects = SupplierManager()
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'supplier'
         verbose_name = "Proveedor"
         verbose_name_plural = "Proveedores"
         indexes = [
-            models.Index(fields=['user']),
-            models.Index(fields=['email']),
+            models.Index(fields=['store']),
         ]
     
     def __str__(self) -> str:
-        return f"{self.name} ({self.company})" if self.company else self.name
+        return self.name
 
 
 class Product(models.Model):
-    """Producto en el catálogo de inventario."""
+    """Producto del catálogo."""
     
-    user = models.ForeignKey(
-        User,
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    store = models.ForeignKey(
+        'accounts.Store',
         on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        help_text="Usuario propietario"
+        related_name='products'
     )
-    name = models.CharField(max_length=250, help_text="Nombre del producto")
     category = models.ForeignKey(
         Category,
         on_delete=models.SET_NULL,
         null=True,
-        help_text="Categoría"
+        related_name='products'
     )
     supplier = models.ForeignKey(
         Supplier,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        help_text="Proveedor"
+        related_name='products'
     )
-    sku = models.CharField(
-        max_length=50,
-        validators=[validate_sku_format],
-        help_text="SKU único"
-    )
-    stock = models.PositiveIntegerField(
-        default=0,
-        validators=[validate_stock_not_negative],
-        help_text="Stock disponible"
-    )
-    price = models.DecimalField(
+    name = models.CharField(max_length=250, help_text="Nombre del producto")
+    base_cost = models.DecimalField(
         max_digits=12,
         decimal_places=2,
-        validators=[validate_positive_decimal],
-        help_text="Precio unitario"
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Costo base para el dueño"
     )
-    image_url = models.URLField(
-        max_length=800,
-        blank=True,
-        null=True,
-        help_text="URL de imagen en Cloudinary"
+    sale_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        help_text="Precio de venta al público"
+    )
+    current_stock = models.PositiveIntegerField(
+        default=0,
+        help_text="Stock disponible actual"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
-    objects = ProductManager()
     
     class Meta:
         db_table = 'product'
         verbose_name = "Producto"
         verbose_name_plural = "Productos"
         indexes = [
-            models.Index(fields=['sku']),
-            models.Index(fields=['user', 'category']),
-            models.Index(fields=['stock']),
+            models.Index(fields=['store']),
+            models.Index(fields=['category']),
+            models.Index(fields=['supplier']),
         ]
     
-    def clean(self):
-        """Validaciones de negocio."""
-        from django.core.exceptions import ValidationError
-        if self.stock < 0:
-            raise ValidationError("El stock no puede ser negativo")
+    def __str__(self) -> str:
+        return self.name
+
+
+class ProductPackaging(models.Model):
+    """Formato de empaque para un producto."""
     
-    @property
-    def status(self) -> str:
-        """Estado del producto basado en stock."""
-        if self.stock == 0:
-            return 'out_of_stock'
-        if self.stock <= 10:
-            return 'low_stock'
-        return 'in_stock'
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name='packagings'
+    )
+    name = models.CharField(
+        max_length=100,
+        help_text="Nombre del empaque (Ej: Caja con 50)"
+    )
+    quantity_per_unit = models.PositiveIntegerField(
+        help_text="Cantidad de unidades en este empaque"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'product_packaging'
+        verbose_name = "Empaque de producto"
+        verbose_name_plural = "Empaques de producto"
     
     def __str__(self) -> str:
-        return f"{self.name} (SKU: {self.sku})"
+        return f"{self.product.name} - {self.name}"
+
+
+class ProductCode(models.Model):
+    """Código (QR, Código de barras, EAN) asociado a un producto."""
+    
+    class CodeType(models.TextChoices):
+        EAN13 = 'ean13', 'EAN13'
+        QR = 'qr', 'QR'
+        UPC = 'upc', 'UPC'
+        SHELF_LABEL = 'shelf_label', 'Etiqueta de Estante'
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name='codes'
+    )
+    code = models.CharField(
+        max_length=100,
+        help_text="Valor del código (para QR o barras)"
+    )
+    code_type = models.CharField(
+        max_length=15,
+        choices=CodeType.choices,
+        help_text="Tipo de código"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'product_code'
+        verbose_name = "Código de producto"
+        verbose_name_plural = "Códigos de producto"
+        unique_together = [['product', 'code']]
+    
+    def __str__(self) -> str:
+        return f"{self.product.name} - {self.code_type}: {self.code}"

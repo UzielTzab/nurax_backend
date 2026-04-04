@@ -200,27 +200,99 @@ class MyModelSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at', 'user']
 ```
 
-#### **3. Crear ViewSet** (`api/views.py`)
+#### **Crear Nuevas Features - ARCHITECTURE_V2 Pattern**
+
+##### **1. Crear Modelo** (`app/models.py`)
 
 ```python
-from rest_framework import viewsets, permissions
+from django.db import models
+from django.core.validators import MinValueValidator
+from decimal import Decimal
+import uuid
+
+class MyModel(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    store = models.ForeignKey('accounts.Store', on_delete=models.CASCADE)  # 🔴 SIEMPRE para multi-tenancy
+    user = models.ForeignKey('accounts.User', on_delete=models.PROTECT)     # Quien lo creó
+    
+    name = models.CharField(max_length=100)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name_plural = 'My Models'
+        unique_together = ('store', 'name')  # Unicidad por tienda
+    
+    def __str__(self) -> str:
+        return f"{self.store.name} - {self.name}"
+```
+
+##### **2. Crear Serializer** (`app/serializers.py`)
+
+```python
+from rest_framework import serializers
+from .models import MyModel
+from decimal import Decimal
+
+class MyModelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MyModel
+        fields = ['id', 'store', 'name', 'amount', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def validate_amount(self, value: Decimal) -> Decimal:
+        """Asegurar que amount sea positivo."""
+        if value <= 0:
+            raise serializers.ValidationError("Amount debe ser mayor a 0")
+        return value
+```
+
+##### **3. Crear ViewSet** (`app/views.py`) - CON MULTI-TENANCY
+
+```python
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from .models import MyModel
+from .serializers import MyModelSerializer
 
 class MyModelViewSet(viewsets.ModelViewSet):
     serializer_class = MyModelSerializer
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        # 🔴 SIEMPRE filtrar por usuario actual
-        return MyModel.objects.filter(user=self.request.user)
+        """🔴 CRÍTICO: Filtrar por tiendas del usuario para multi-tenancy"""
+        user_stores = self.request.user.storemembership_set.values_list('store_id', flat=True)
+        return MyModel.objects.filter(store_id__in=user_stores)
     
     def perform_create(self, serializer):
-        # 🔴 SIEMPRE asignar usuario
-        serializer.save(user=self.request.user)
+        """🔴 CRÍTICO: Asignar store desde request query param"""
+        store_id = self.request.query_params.get('store_id')
+        if not store_id:
+            return Response({'error': 'store_id required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Verificar que usuario tiene acceso a esta tienda
+        user_store_ids = self.request.user.storemembership_set.values_list('store_id', flat=True)
+        if str(store_id) not in [str(s) for s in user_store_ids]:
+            return Response({'error': 'No access to this store'}, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer.save(store_id=store_id, user=self.request.user)
+    
+    @action(detail=True, methods=['post'])
+    def custom_action(self, request, pk=None):
+        """Ejemplo de custom action."""
+        obj = self.get_object()
+        # Hacer algo
+        return Response({'status': 'ok'})
 ```
 
-#### **4. Registrar Ruta** (`api/urls.py`)
+##### **4. Registrar Ruta** (`app/urls.py`)
 
 ```python
+from django.urls import path, include
 from rest_framework.routers import SimpleRouter
 from .views import MyModelViewSet
 
@@ -228,73 +300,108 @@ router = SimpleRouter()
 router.register(r'my-models', MyModelViewSet, basename='mymodel')
 
 urlpatterns = [
-    path('api/', include(router.urls)),
+    path('', include(router.urls)),
 ]
 ```
 
-#### **5. Registrar en Admin** (`api/admin.py`)
+##### **5. Registrar en Admin** (`app/admin.py`)
 
 ```python
+from django.contrib import admin
+from .models import MyModel
+
 @admin.register(MyModel)
 class MyModelAdmin(admin.ModelAdmin):
-    list_display = ('name', 'user', 'created_at')
-    list_filter = ('created_at', 'user')
-    search_fields = ('name',)
-    readonly_fields = ('created_at', 'updated_at')
+    list_display = ('name', 'store', 'user', 'amount', 'created_at')
+    list_filter = ('store', 'created_at')
+    search_fields = ('name', 'store__name')
+    readonly_fields = ('id', 'created_at', 'updated_at')
+    fieldsets = (
+        ('Información', {'fields': ('id', 'store', 'user', 'name')}),
+        ('Datos', {'fields': ('amount',)}),
+        ('Timestamps', {'fields': ('created_at', 'updated_at')}),
+    )
 ```
 
-#### **6. Crear Migración**
+##### **6. Crear Migración**
 
 ```bash
-# En Docker:
-docker exec nurax_api python manage.py makemigrations
+# Generar migración
+docker exec nurax_api python manage.py makemigrations app_name
 
-# Local:
-python manage.py makemigrations
+# O local
+python manage.py makemigrations app_name
 
-# Ver qué cambió
-cat api/migrations/000X_auto.py
-
-# Aplicar:
+# Aplicar
 docker exec nurax_api python manage.py migrate
 # o
 python manage.py migrate
 ```
 
-#### **7. Test** (`api/tests.py`)
+##### **7. Test con Multi-Tenancy** (`app/tests.py`)
 
 ```python
 from django.test import TestCase
 from rest_framework.test import APITestCase
-from api.models import MyModel, User
+from accounts.models import User, Store, StoreMembership
+from .models import MyModel
 
 class MyModelTest(APITestCase):
     def setUp(self):
+        # Crear user
         self.user = User.objects.create_user(
             email='test@test.com',
             password='test123'
         )
+        
+        # Crear store
+        self.store = Store.objects.create(
+            name='Test Store',
+            plan='pro',
+            tax_id='J-12345678'
+        )
+        
+        # Crear membership (dar acceso)
+        StoreMembership.objects.create(
+            store=self.store,
+            user=self.user,
+            role='owner'
+        )
+        
+        # Autenticar
         self.client.force_authenticate(user=self.user)
     
     def test_create_mymodel(self):
-        response = self.client.post('/api/my-models/', {
+        """Solo puede crear en sus tiendas."""
+        response = self.client.post('/api/v1/app_name/my-models/?store_id=' + str(self.store.id), {
             'name': 'Test',
-            'description': 'Test description'
+            'amount': '99.99'
         })
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(MyModel.objects.count(), 1)
+        self.assertEqual(MyModel.objects.filter(store=self.store).count(), 1)
     
-    def test_list_mymodel(self):
+    def test_isolation_between_stores(self):
+        """Usuarios de diferentes tiendas no ven datos."""
+        # Crear otro usuario en otra tienda
+        other_store = Store.objects.create(name='Other Store', plan='pro', tax_id='J-87654321')
+        other_user = User.objects.create_user(email='other@test.com', password='test123')
+        StoreMembership.objects.create(store=other_store, user=other_user, role='owner')
+        
+        # Crear modelo en primera tienda
         MyModel.objects.create(
+            store=self.store,
             user=self.user,
-            name='Test'
+            name='My Data',
+            amount='50.00'
         )
-        response = self.client.get('/api/my-models/')
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data['results']), 1)
+        
+        # Otro usuario no lo ve
+        self.client.force_authenticate(user=other_user)
+        response = self.client.get('/api/v1/app_name/my-models/')
+        self.assertEqual(len(response.data.get('results', [])), 0)
 ```
 
-#### **8. Documentar**
+##### **8. Documentar**
 
 Actualizar `docs/API_ENDPOINTS.md`:
 ```markdown

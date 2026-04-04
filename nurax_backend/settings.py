@@ -32,12 +32,13 @@ INSTALLED_APPS = [
     'cloudinary_storage',
     'django_filters',
     'drf_spectacular',
-    # Local apps - Domain driven
+    # Local apps - ARCHITECTURE_V2
     'accounts.apps.AccountsConfig',
     'products.apps.ProductsConfig',
     'sales.apps.SalesConfig',
     'inventory.apps.InventoryConfig',
     'expenses.apps.ExpensesConfig',
+    'carts.apps.CartsConfig',
     # Legacy
     'api',
 ]

@@ -1,8 +1,10 @@
 """
-Modelos para la app Accounts - Usuarios, clientes y perfiles.
+Modelos para la app Accounts - Autenticación, usuarios y tiendas.
+ARCHITECTURE_V2: Sistema multi-tienda con membresía y roles.
 """
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+import uuid
 
 
 class User(AbstractUser):
@@ -12,20 +14,18 @@ class User(AbstractUser):
         ADMIN = 'admin', 'Administrador'
         CLIENTE = 'cliente', 'Cliente'
     
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.EmailField(unique=True, help_text="Email único del usuario")
     role = models.CharField(
-        max_length=10,
+        max_length=20,
         choices=Role.choices,
         default=Role.CLIENTE,
         help_text="Rol del usuario en el sistema"
     )
-    name = models.CharField(max_length=150, help_text="Nombre completo")
-    email = models.EmailField(unique=True, help_text="Email único del usuario")
-    avatar_url = models.URLField(
-        max_length=800,
-        blank=True,
-        null=True,
-        help_text="URL de avatar en Cloudinary"
-    )
+    avatar_url = models.URLField(blank=True, null=True, help_text="URL de avatar del usuario")
+    name = models.CharField(max_length=200, blank=True, help_text="Nombre completo")
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
     
     class Meta:
         db_table = 'user'
@@ -33,92 +33,93 @@ class User(AbstractUser):
         verbose_name_plural = "Usuarios"
         indexes = [
             models.Index(fields=['email']),
-            models.Index(fields=['role']),
         ]
     
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
     
     def __str__(self) -> str:
-        return f"{self.name} ({self.email})"
+        return f"{self.username} ({self.email})"
 
 
-class Client(models.Model):
-    """Empresa/Cliente que contrata el servicio."""
+class Store(models.Model):
+    """Tienda/Empresa que utiliza Nurax."""
     
     class Plan(models.TextChoices):
         BASICO = 'basico', 'Básico'
         PRO = 'pro', 'Pro'
     
-    user = models.OneToOneField(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        help_text="Usuario asociado al cliente"
-    )
-    name = models.CharField(max_length=200, help_text="Nombre del cliente")
-    email = models.EmailField(unique=True, help_text="Email del cliente")
-    company = models.CharField(max_length=200, help_text="Nombre de la empresa")
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=200, help_text="Nombre de la tienda (Ej: Electrónica Nurax)")
     plan = models.CharField(
         max_length=15,
         choices=Plan.choices,
         default=Plan.BASICO
     )
-    active = models.BooleanField(default=True, help_text="Cliente activo")
+    tax_id = models.CharField(max_length=50, blank=True, help_text="RIF/NIT")
+    active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    avatar_color = models.CharField(max_length=10, default='#06402B')
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'store'
+        verbose_name = "Tienda"
+        verbose_name_plural = "Tiendas"
+        indexes = [
+            models.Index(fields=['active']),
+        ]
+    
+    def __str__(self) -> str:
+        return f"{self.name} ({self.plan})"
+
+
+class StoreMembership(models.Model):
+    """Membresía de usuario a tienda con rol."""
+    
+    class Role(models.TextChoices):
+        OWNER = 'owner', 'Propietario'
+        MANAGER = 'manager', 'Gerente'
+        CASHIER = 'cashier', 'Cajero'
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name='memberships')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='store_memberships')
+    role = models.CharField(
+        max_length=15,
+        choices=Role.choices,
+        help_text="Rol en la tienda"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'store_membership'
+        unique_together = [['store', 'user']]
+        verbose_name = "Membresía de tienda"
+        verbose_name_plural = "Membresías de tienda"
+    
+    def __str__(self) -> str:
+        return f"{self.user.username} - {self.store.name} ({self.role})"
+
+
+class Client(models.Model):
+    """Cliente que compra en la tienda."""
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=200, help_text="Nombre del cliente")
+    credit_limit = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        help_text="Límite de crédito"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'client'
         verbose_name = "Cliente"
         verbose_name_plural = "Clientes"
-        indexes = [
-            models.Index(fields=['email']),
-            models.Index(fields=['active']),
-        ]
     
     def __str__(self) -> str:
-        return f"{self.company} — {self.name}"
-
-
-class StoreProfile(models.Model):
-    """Configuración de tienda por usuario."""
-    
-    user = models.OneToOneField(
-        User,
-        on_delete=models.CASCADE,
-        related_name='store_profile'
-    )
-    company_name = models.CharField(max_length=200, blank=True)
-    company_email = models.EmailField(blank=True)
-    phone = models.CharField(max_length=20, blank=True)
-    address = models.TextField(blank=True)
-    logo_url = models.URLField(max_length=800, blank=True, null=True)
-    tax_id = models.CharField(max_length=50, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        db_table = 'store_profile'
-        verbose_name = "Perfil de Tienda"
-        verbose_name_plural = "Perfiles de Tienda"
-    
-    def __str__(self) -> str:
-        return f"Perfil de {self.user.name}"
-
-
-class ActiveSessionCart(models.Model):
-    """Carrito activo de sesión."""
-    
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
-    session_id = models.CharField(max_length=255, unique=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        db_table = 'active_session_cart'
-        verbose_name = "Carrito de Sesión Activa"
-    
-    def __str__(self) -> str:
-        return f"Carrito de {self.user.name}"
+        return self.name

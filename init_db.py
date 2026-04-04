@@ -5,9 +5,17 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nurax_backend.settings")
 django.setup()
 
 from products.models import Category
-from accounts.models import User
+from accounts.models import User, Store
 
 print("--- Iniciando poblado de base de datos de producción ---")
+
+# 0. Crear o obtener Store predeterminado para V2 (multi-tenant)
+store_default, store_created = Store.objects.get_or_create(
+    name='Nurax Store Default',
+    defaults={'plan': 'enterprise'}
+)
+status = "Creada" if store_created else "Ya existía"
+print(f"[{status}] Store predefinida: {store_default.name}")
 
 # 1. Crear las Categorías Base Exactas
 categorias = [
@@ -15,11 +23,14 @@ categorias = [
     'Fotografía', 'Gaming', 'Accesorios', 'Otros'
 ]
 for c in categorias:
-    obj, created = Category.objects.get_or_create(name=c)
+    obj, created = Category.objects.get_or_create(
+        name=c,
+        store=store_default  # Asociar a la store predefinida
+    )
     status = "Creada" if created else "Ya existía"
     print(f"[{status}] Categoría: {c}")
 
-# 2. Crear Superusuario Maestro de Producción (Variables de entorno)
+# 2. Crear o obtener Superusuario Maestro de Producción (Variables de entorno)
 email_admin = os.environ.get('ADMIN_EMAIL', 'uzieltzab8@gmail.com')
 password_admin = os.environ.get('ADMIN_PASSWORD')
 
@@ -34,17 +45,21 @@ else:
     if admin_exists:
         existing_admin = User.objects.get(username=admin_username)
         print(f"[Aviso] Superusuario '{admin_username}' ya existe con email: {existing_admin.email}")
+        # Actualizar role a admin si no está
+        if existing_admin.role != 'admin':
+            existing_admin.role = 'admin'
+            existing_admin.save()
+            print(f"[Actualizado] Role del admin actualizado a 'admin'")
     elif email_exists:
         print(f"[Aviso] Email '{email_admin}' ya está registrado en otro usuario.")
     else:
-        User.objects.create_superuser(
+        admin_user = User.objects.create_superuser(
             username=admin_username, 
             email=email_admin, 
             password=password_admin,
-            name='Administrador Maestro',
-            role='admin',
-            is_active=True
+            is_active=True,
+            role='admin'  # Establecer role como admin
         )
-        print(f"[Creado] Superusuario maestro '{email_admin}' creado con éxito.")
+        print(f"[Creado] Superusuario maestro '{email_admin}' creado con roles admin.")
 
 print("--- Finalizado ---")

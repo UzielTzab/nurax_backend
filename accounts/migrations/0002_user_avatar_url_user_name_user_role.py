@@ -10,19 +10,58 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='user',
-            name='avatar_url',
-            field=models.URLField(blank=True, help_text='URL de avatar del usuario', null=True),
-        ),
-        migrations.AddField(
-            model_name='user',
-            name='name',
-            field=models.CharField(blank=True, help_text='Nombre completo', max_length=200),
-        ),
-        migrations.AddField(
-            model_name='user',
-            name='role',
-            field=models.CharField(choices=[('admin', 'Administrador'), ('cliente', 'Cliente')], default='cliente', help_text='Rol del usuario en el sistema', max_length=20),
+        # Use SeparateDatabaseAndState to handle existing columns on Render
+        # The database side checks if columns exist, avoiding duplicate column errors
+        # The state side tells Django that these fields exist
+        migrations.SeparateDatabaseAndState(
+            database_operations=[
+                migrations.RunSQL(
+                    """
+                    -- PostgreSQL: Safely add columns only if they don't exist
+                    DO $$ 
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM information_schema.columns 
+                            WHERE table_name = 'user' AND column_name = 'avatar_url'
+                        ) THEN
+                            ALTER TABLE "user" ADD COLUMN "avatar_url" varchar(200) NULL;
+                        END IF;
+                        
+                        IF NOT EXISTS (
+                            SELECT 1 FROM information_schema.columns 
+                            WHERE table_name = 'user' AND column_name = 'name'
+                        ) THEN
+                            ALTER TABLE "user" ADD COLUMN "name" varchar(200) DEFAULT '';
+                        END IF;
+                        
+                        IF NOT EXISTS (
+                            SELECT 1 FROM information_schema.columns 
+                            WHERE table_name = 'user' AND column_name = 'role'
+                        ) THEN
+                            ALTER TABLE "user" ADD COLUMN "role" varchar(20) DEFAULT 'cliente';
+                        END IF;
+                    END $$;
+                    """,
+                    reverse_sql=migrations.RunSQL.noop
+                ),
+            ],
+            state_operations=[
+                migrations.AddField(
+                    model_name='user',
+                    name='avatar_url',
+                    field=models.URLField(blank=True, help_text='URL de avatar del usuario', null=True),
+                ),
+                migrations.AddField(
+                    model_name='user',
+                    name='name',
+                    field=models.CharField(blank=True, help_text='Nombre completo', max_length=200),
+                ),
+                migrations.AddField(
+                    model_name='user',
+                    name='role',
+                    field=models.CharField(choices=[('admin', 'Administrador'), ('cliente', 'Cliente')], 
+                                         default='cliente', help_text='Rol del usuario en el sistema', max_length=20),
+                ),
+            ]
         ),
     ]

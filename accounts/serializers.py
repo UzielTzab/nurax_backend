@@ -2,6 +2,7 @@
 Serializadores para la app Accounts.
 ARCHITECTURE_V2: Usuarios, tiendas y membresías.
 """
+import cloudinary.uploader
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import User, Store, StoreMembership, Client
@@ -11,6 +12,7 @@ User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
     """Serializer para usuarios - retorna campos esperados por frontend."""
+    avatar_file = serializers.ImageField(write_only=True, required=False)
     
     # Método para obtener 'name' como combinación de first_name y last_name
     def get_name(self, obj):
@@ -31,8 +33,59 @@ class UserSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_active', 'name', 'role', 'avatar_url']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_active', 'name', 'role', 'avatar_url', 'avatar_file']
         read_only_fields = ['id']
+        extra_kwargs = {
+            'avatar_url': {'read_only': True},
+        }
+
+    def update(self, instance, validated_data):
+        """Sube avatar a Cloudinary cuando llega avatar_file y persiste avatar_url."""
+        avatar_file = validated_data.pop('avatar_file', None)
+        if avatar_file:
+            try:
+                upload_data = cloudinary.uploader.upload(
+                    avatar_file,
+                    folder='avatars',
+                    transformation=[{'width': 400, 'height': 400, 'crop': 'fill', 'gravity': 'face'}]
+                )
+                validated_data['avatar_url'] = upload_data.get('secure_url')
+            except Exception as exc:
+                raise serializers.ValidationError({'avatar_file': f'Error al subir imagen: {exc}'})
+
+        return super().update(instance, validated_data)
+
+
+class UserRegistrationSerializer(serializers.ModelSerializer):
+    """Serializer para crear nuevos usuarios (registro/admin creation)."""
+    
+    password = serializers.CharField(write_only=True, required=True, min_length=6)
+    password_confirm = serializers.CharField(write_only=True, required=True, min_length=6)
+    
+    class Meta:
+        model = User
+        fields = ['email', 'username', 'name', 'password', 'password_confirm', 'role']
+    
+    def validate(self, data):
+        """Validar que las contraseñas coincidan."""
+        if data.get('password') != data.get('password_confirm'):
+            raise serializers.ValidationError({'password_confirm': 'Las contraseñas no coinciden.'})
+        
+        # Validar email único
+        if User.objects.filter(email=data.get('email')).exists():
+            raise serializers.ValidationError({'email': 'Este email ya está registrado.'})
+        
+        return data
+    
+    def create(self, validated_data):
+        """Crear nuevo usuario con contraseña."""
+        validated_data.pop('password_confirm')
+        password = validated_data.pop('password')
+        
+        user = User.objects.create_user(**validated_data)
+        user.set_password(password)
+        user.save()
+        return user
 
 
 class StoreSerializer(serializers.ModelSerializer):
@@ -48,12 +101,13 @@ class StoreMembershipSerializer(serializers.ModelSerializer):
     """Serializer para membresías de tienda."""
     
     user_email = serializers.CharField(source='user.email', read_only=True)
+    user_name = serializers.CharField(source='user.name', read_only=True)
     store_name = serializers.CharField(source='store.name', read_only=True)
     
     class Meta:
         model = StoreMembership
-        fields = ['id', 'store', 'store_name', 'user', 'user_email', 'role', 'joined_at']
-        read_only_fields = ['id', 'joined_at']
+        fields = ['id', 'store', 'store_name', 'user', 'user_email', 'user_name', 'role', 'created_at']
+        read_only_fields = ['id', 'created_at']
 
 
 class ClientSerializer(serializers.ModelSerializer):
@@ -61,8 +115,79 @@ class ClientSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Client
-        fields = ['id', 'name', 'credit_limit', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        fields = ['id', 'name', 'credit_limit', 'active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class StoreWithOwnerSerializer(serializers.Serializer):
+    """Serializer para crear Store + User + StoreMembership en una transacción atómica.
+    
+    Este serializer maneja el flujo completo de crear una tienda con su propietario.
+    """
+    
+    # Store fields (input)
+    store_name = serializers.CharField(max_length=200, required=True, write_only=True)
+    store_plan = serializers.ChoiceField(choices=['basico', 'pro'], default='basico', write_only=True)
+    store_tax_id = serializers.CharField(max_length=50, required=False, allow_blank=True, write_only=True)
+    
+    # User fields (input)
+    owner_email = serializers.EmailField(required=True, write_only=True)
+    owner_name = serializers.CharField(max_length=200, required=True, write_only=True)
+    
+    # Respuesta (solo lectura)
+    store = StoreSerializer(read_only=True)
+    user = UserSerializer(read_only=True)
+    credentials = serializers.SerializerMethodField(read_only=True)
+    
+    def get_credentials(self, obj):
+        """Retorna las credenciales generadas del usuario."""
+        return {
+            'email': obj.get('user_email'),
+            'password': 'nurax123',
+            'username': obj.get('username')
+        }
+    
+    def create(self, validated_data):
+        """Crear Store + User + StoreMembership en una transacción atómica."""
+        from django.db import transaction
+        
+        with transaction.atomic():
+            # 1. Crear usuario con password default
+            email = validated_data['owner_email']
+            name = validated_data['owner_name']
+            username = email.split('@')[0]  # Generar username desde email
+            
+            # Verificar que el email no exista
+            if User.objects.filter(email=email).exists():
+                raise serializers.ValidationError({'owner_email': 'Este email ya está registrado.'})
+            
+            user = User.objects.create_user(
+                email=email,
+                username=username,
+                name=name,
+                password='nurax123'  # Password por defecto
+            )
+            
+            # 2. Crear tienda
+            store = Store.objects.create(
+                name=validated_data['store_name'],
+                plan=validated_data.get('store_plan', 'basico'),
+                tax_id=validated_data.get('store_tax_id', '')
+            )
+            
+            # 3. Crear membresía (user es propietario de store)
+            StoreMembership.objects.create(
+                store=store,
+                user=user,
+                role=StoreMembership.Role.OWNER
+            )
+            
+            return {
+                'store': store,
+                'user': user,
+                'user_email': email,
+                'username': username
+            }
 
 
 class StoreWithMembershipsSerializer(serializers.ModelSerializer):

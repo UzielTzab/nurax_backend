@@ -11,14 +11,15 @@ from django.db import transaction
 from .models import User, Store, StoreMembership, Client
 from .serializers import (
     UserSerializer, StoreSerializer, StoreMembershipSerializer,
-    ClientSerializer, StoreWithMembershipsSerializer
+    ClientSerializer, StoreWithMembershipsSerializer, UserRegistrationSerializer,
+    StoreWithOwnerSerializer
 )
 
 User = get_user_model()
 
 
-class UserViewSet(viewsets.ViewSet):
-    """ViewSet para usuarios (solo lectura del perfil)."""
+class UserViewSet(viewsets.GenericViewSet):
+    """ViewSet para usuarios (lectura, actualización, registro y cambio de contraseña)."""
     
     permission_classes = [IsAuthenticated]
     
@@ -72,6 +73,105 @@ class UserViewSet(viewsets.ViewSet):
         user.save()
         
         return Response({'message': 'Contraseña actualizada correctamente'})
+    
+    @action(detail=False, methods=['POST'], permission_classes=[AllowAny])
+    def register(self, request):
+        """Registra un nuevo usuario.
+        
+        POST /v1/accounts/users/register/
+        {
+            "email": "user@example.com",
+            "username": "username",
+            "name": "User Name",
+            "password": "password123",
+            "password_confirm": "password123"
+        }
+        """
+        serializer = UserRegistrationSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            return Response(
+                {'id': user.id, 'email': user.email, 'username': user.username},
+                status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def software_clients(self, request):
+        """Lista clientes del software (usuarios con rol owner en al menos una tienda)."""
+        if request.user.role != User.Role.ADMIN:
+            return Response({'error': 'Solo administradores pueden listar clientes del software'}, status=status.HTTP_403_FORBIDDEN)
+
+        memberships = (
+            StoreMembership.objects
+            .filter(role=StoreMembership.Role.OWNER)
+            .select_related('user', 'store')
+            .order_by('-created_at')
+        )
+
+        seen_users = set()
+        results = []
+        for membership in memberships:
+            if membership.user_id in seen_users:
+                continue
+            seen_users.add(membership.user_id)
+            results.append({
+                'id': str(membership.user.id),
+                'name': membership.user.name or membership.user.username,
+                'email': membership.user.email,
+                'role': membership.role,
+                'is_active': membership.user.is_active,
+                'created_at': membership.user.created_at,
+                'store_id': str(membership.store.id),
+                'store_name': membership.store.name,
+                'store_plan': membership.store.plan,
+            })
+
+        return Response({'count': len(results), 'results': results}, status=status.HTTP_200_OK)
+
+    def toggle_software_client(self, request, user_id=None):
+        """Activa/desactiva la cuenta de un cliente del software."""
+        if request.user.role != User.Role.ADMIN:
+            return Response({'error': 'Solo administradores pueden cambiar el estado'}, status=status.HTTP_403_FORBIDDEN)
+
+        user = User.objects.filter(id=user_id).first()
+        if not user:
+            return Response({'error': 'Usuario no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
+        has_owner_membership = StoreMembership.objects.filter(
+            user=user,
+            role=StoreMembership.Role.OWNER
+        ).exists()
+        if not has_owner_membership:
+            return Response({'error': 'El usuario no es un cliente del software (owner)'}, status=status.HTTP_400_BAD_REQUEST)
+
+        requested_state = request.data.get('is_active')
+        if requested_state is None:
+            user.is_active = not user.is_active
+        else:
+            user.is_active = bool(requested_state)
+        user.save(update_fields=['is_active'])
+
+        return Response({'id': str(user.id), 'is_active': user.is_active}, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def delete_software_client(self, request, user_id=None):
+        """Elimina una cuenta de cliente del software (hard delete)."""
+        if request.user.role != User.Role.ADMIN:
+            return Response({'error': 'Solo administradores pueden eliminar clientes del software'}, status=status.HTTP_403_FORBIDDEN)
+
+        user = User.objects.filter(id=user_id).first()
+        if not user:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        has_owner_membership = StoreMembership.objects.filter(
+            user=user,
+            role=StoreMembership.Role.OWNER
+        ).exists()
+        if not has_owner_membership:
+            return Response({'error': 'El usuario no es un cliente del software (owner)'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class StoreViewSet(viewsets.ModelViewSet):
@@ -94,7 +194,39 @@ class StoreViewSet(viewsets.ModelViewSet):
         """Usar serializer con membresías en el detalle."""
         if self.action == 'retrieve':
             return StoreWithMembershipsSerializer
+        if self.action == 'create_with_owner':
+            return StoreWithOwnerSerializer
         return self.serializer_class
+    
+    @action(detail=False, methods=['POST'], permission_classes=[IsAuthenticated])
+    def create_with_owner(self, request):
+        """Crear una tienda con su propietario en una transacción atómica.
+        
+        POST /v1/accounts/stores/create-with-owner/
+        {
+            "store_name": "Tienda XYZ",
+            "store_plan": "pro",
+            "store_tax_id": "J-12345678-9",
+            "owner_email": "owner@example.com",
+            "owner_name": "Juan Pérez"
+        }
+        
+        Respuesta (201):
+        {
+            "store": {...},
+            "user": {...},
+            "credentials": {
+                "email": "owner@example.com",
+                "password": "nurax123",
+                "username": "owner"
+            }
+        }
+        """
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            instance = serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=True, methods=['GET'])
     def memberships(self, request, pk=None):

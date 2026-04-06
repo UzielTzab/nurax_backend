@@ -209,22 +209,18 @@ erDiagram
 | date_joined | TIMESTAMP | Auto |
 | last_login | TIMESTAMP | Auto |
 
-#### **CLIENT**
-- Empresas que contratan el servicio
-- OneToOne con USER (opcional)
-- Contiene plan de suscripción
+#### **CLIENT** (V2)
+- Clientes que compran en la tienda
+- Modelo sincronizado con V2 Architecture
 
 | Campo | Tipo | Notas |
 |-------|------|-------|
-| id | INT | PK |
-| user_id | INT | FK(User) - nullable |
-| name | VARCHAR(200) | |
-| email | VARCHAR(255) | UNIQUE |
-| company | VARCHAR(200) | Nombre empresa |
-| plan | VARCHAR(15) | basico, pro |
-| active | BOOLEAN | Estado suscripción |
-| created_at | TIMESTAMP | Auto |
-| avatar_color | VARCHAR(10) | Color para avatar |
+| id | UUID | PK |
+| name | VARCHAR(200) | Nombre del cliente |
+| credit_limit | DECIMAL(12,2) | Límite de crédito |
+| active | BOOLEAN | Estado del cliente (activado/desactivado) |
+| created_at | TIMESTAMP | Auto - Fecha de creación |
+| updated_at | TIMESTAMP | Auto - Última actualización |
 
 #### **STORE_PROFILE**
 - Configuración del negocio por usuario

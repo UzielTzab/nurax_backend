@@ -80,8 +80,53 @@ Documentación completa de la API REST. Todos los endpoints requieren autenticac
 }
 ```
 
+**Response (200):**
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "username": "john_doe",
+  "email": "john@example.com",
+  "name": "Juan García",
+  "first_name": "Juan",
+  "last_name": "García",
+  "is_active": true
+}
+```
+
+#### Register New User (Public)
+
+**POST** `/accounts/users/register/` *(No Authentication Required)*
+
+Crea una nueva cuenta de usuario. Este endpoint es público y no requiere tokens JWT.
+
+```json
+{
+  "email": "newuser@example.com",
+  "username": "newuser",
+  "name": "New User",
+  "password": "securepass123",
+  "password_confirm": "securepass123"
+}
+```
+
+**Response (201):**
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "email": "newuser@example.com",
+  "username": "newuser"
+}
+```
+
+**Errors:**
+- `400`: Email already registered або passwords don't match
+- `400`: Missing required fields (email, username, name, password, password_confirm)
+
 #### Change Password
-**PATCH** `/accounts/users/change_password/`
+
+**PATCH** `/accounts/users/change-password/` *(Requires Authentication)*
+
+Cambia la contraseña del usuario autenticado.
 
 ```json
 {
@@ -90,6 +135,17 @@ Documentación completa de la API REST. Todos los endpoints requieren autenticac
   "confirm_password": "newpass456"
 }
 ```
+
+**Response (200):**
+```json
+{
+  "message": "Contraseña actualizada correctamente"
+}
+```
+
+**Errors:**
+- `400`: Missing fields or passwords don't match
+- `401`: Current password is incorrect
 
 ---
 
@@ -118,6 +174,89 @@ Obtiene todas las tiendas donde el usuario es miembro.
 #### Store Detail (con membresías)
 **GET** `/accounts/stores/{store_id}/`
 
+**Response (200):**
+```json
+{
+  "id": "123e4567-e89b-12d3-a456-426614174000",
+  "name": "Electrónica Nurax",
+  "plan": "pro",
+  "tax_id": "J-12345678-9",
+  "active": true,
+  "memberships": [
+    {
+      "id": "...",
+      "store": "123e4567-e89b-12d3-a456-426614174000",
+      "store_name": "Electrónica Nurax",
+      "user": "550e8400-e29b-41d4-a716-446655440000",
+      "user_email": "owner@example.com",
+      "user_name": "Juan Pérez",
+      "role": "owner",
+      "created_at": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "created_at": "2024-01-15T10:30:00Z"
+}
+```
+
+#### Create Store with Owner (Crear tienda con propietario)
+
+**POST** `/accounts/stores/create-with-owner/` *(Requires Authentication)*
+
+Crea una nueva tienda y su propietario en una **transacción atómica**. El propietario recibe una contraseña por defecto.
+
+**Request:**
+```json
+{
+  "store_name": "Mi Tienda XYZ",
+  "store_plan": "pro",
+  "store_tax_id": "J-12345678-9",
+  "owner_email": "juan@example.com",
+  "owner_name": "Juan Pérez"
+}
+```
+
+**Response (201):**
+```json
+{
+  "store": {
+    "id": "123e4567-e89b-12d3-a456-426614174000",
+    "name": "Mi Tienda XYZ",
+    "plan": "pro",
+    "tax_id": "J-12345678-9",
+    "active": true,
+    "created_at": "2024-03-15T10:30:00Z",
+    "updated_at": "2024-03-15T10:30:00Z"
+  },
+  "user": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "username": "juan",
+    "email": "juan@example.com",
+    "name": "Juan Pérez",
+    "role": "cliente",
+    "is_active": true
+  },
+  "credentials": {
+    "email": "juan@example.com",
+    "password": "nurax123",
+    "username": "juan"
+  }
+}
+```
+
+**Flujo Automático:**
+1. ✅ Se crea `User` con password=`nurax123`
+2. ✅ Se crea `Store` con los datos proporcionados
+3. ✅ Se crea `StoreMembership` (user → store con role=`owner`)
+4. ✅ Se retornan las credenciales para que el nuevo propietario inicie sesión
+
+**Errores:**
+- `400`: Email already registered, missing fields
+- `401`: Unauthorized (debe estar autenticado como admin)
+
+Nota de compatibilidad de rutas:
+- Principal: `/accounts/stores/create-with-owner/`
+- Alias existente del router: `/accounts/stores/create_with_owner/`
+
 ---
 
 ### Membresías de Tienda (StoreMemberships)
@@ -140,20 +279,64 @@ Obtiene todas las tiendas donde el usuario es miembro.
 
 ---
 
+### Clientes del Software (Store Owners)
+
+Estos endpoints gestionan las cuentas que inician sesión en Nurax como dueños de tienda.
+
+#### List Software Clients
+**GET** `/accounts/users/software-clients/`
+
+Retorna usuarios que tengan al menos una `StoreMembership` con rol `owner`.
+
+#### Toggle Software Client Active Status
+**PATCH** `/accounts/users/software-clients/{user_id}/toggle-active/`
+
+```json
+{
+  "is_active": false
+}
+```
+
+#### Delete Software Client (Soft Delete)
+**DELETE** `/accounts/users/software-clients/{user_id}/`
+
+Desactiva la cuenta (`is_active=false`) en lugar de borrarla físicamente.
+
+---
+
 ### Clientes (Customers)
 
+Estos son clientes finales de una tienda (compradores), no cuentas de acceso al software.
+
 #### List Clients
-**GET** `/accounts/clients/`
+**GET** `/v1/accounts/clients/`
+
+Returns paginated list of clients with their status and credit limit.
 
 #### Create Client
-**POST** `/accounts/clients/`
+**POST** `/v1/accounts/clients/`
 
 ```json
 {
   "name": "María López",
-  "credit_limit": 10000.00
+  "credit_limit": 10000.00,
+  "active": true
 }
 ```
+
+#### Update Client
+**PATCH** `/v1/accounts/clients/{id}/`
+
+```json
+{
+  "name": "María López García",
+  "credit_limit": 15000.00,
+  "active": false
+}
+```
+
+#### Delete Client
+**DELETE** `/v1/accounts/clients/{id}/`
 
 ---
 

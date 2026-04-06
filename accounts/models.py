@@ -113,6 +113,7 @@ class Client(models.Model):
         default=0,
         help_text="Límite de crédito"
     )
+    active = models.BooleanField(default=True, help_text="Estado del cliente")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

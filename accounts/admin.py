@@ -45,11 +45,11 @@ class StoreMembershipAdmin(admin.ModelAdmin):
 
 @admin.register(Client)
 class ClientAdmin(admin.ModelAdmin):
-    list_display = ['name', 'credit_limit', 'created_at']
-    list_filter = ['created_at']
+    list_display = ['name', 'credit_limit', 'active', 'created_at']
+    list_filter = ['created_at', 'active']
     search_fields = ['name']
     readonly_fields = ['id', 'created_at', 'updated_at']
     fieldsets = (
-        ('Información', {'fields': ('id', 'name', 'credit_limit')}),
+        ('Información', {'fields': ('id', 'name', 'credit_limit', 'active')}),
         ('Timestamps', {'fields': ('created_at', 'updated_at')}),
     )

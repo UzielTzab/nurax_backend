@@ -59,11 +59,24 @@ Arquitectura **multi-tenant enterprise-grade** con Domain-Driven Design (DDD). C
 StoreMembershipManager.get_user_stores(user)  # Tiendas del usuario
 ```
 
+**Flujo de Creación - Store Owners (Clientes del Software)**:
+
+```
+1. Admin → POST /stores/create-with-owner/
+2. Backend (transacción atómica):
+   a. Crear User (email, password="nurax123")
+   b. Crear Store (name, plan, tax_id)
+   c. Crear StoreMembership (user=propietario, role="owner")
+3. Retorna credenciales al admin para que comparta con el nuevo dueño
+4. Store Owner hace login con email + "nurax123"
+```
+
 **Endpoints**:
+- `POST /api/v1/accounts/stores/create-with-owner/` - ⭐ Crear tienda con propietario
 - `GET /api/v1/accounts/users/me/` - Profile actual
 - `GET /api/v1/accounts/stores/` - Mis tiendas
-- `POST /api/v1/accounts/memberships/` - Agregar miembro
-- `GET /api/v1/accounts/clients/` - Listar clientes
+- `POST /api/v1/accounts/memberships/` - Agregar miembro (manager/cashier)
+- `GET /api/v1/accounts/clients/` - Listar clientes (compradores finales)
 
 ---
 

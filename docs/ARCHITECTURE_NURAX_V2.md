@@ -3,6 +3,36 @@ config:
   layout: elk
   theme: redux-color
 ---
+
+# 📐 ARQUITECTURA NURAX V2 - Modelo de Datos
+
+## ⭐ Store Owners (Clientes del Software)
+
+Los propietarios de tiendas (Store Owners) se crean mediante el endpoint:
+
+```
+POST /v1/accounts/stores/create-with-owner/
+{
+  "store_name": "Tienda XYZ",
+  "store_plan": "pro",
+  "store_tax_id": "J-12345678-9",
+  "owner_email": "owner@example.com",
+  "owner_name": "Juan Pérez"
+}
+```
+
+**Flujo Automático (Transacción Atómica)**:
+1. ✅ Se crea `USER` (email, password="nurax123")
+2. ✅ Se crea `STORE` con datos proporcionados  
+3. ✅ Se crea `STORE_MEMBERSHIP` con role="owner"
+4. ✅ Se retornan credenciales para primer login
+
+Esto diferencia claramente:
+- **Store Owner**: Usuario del sistema (puede hacer login)
+- **Customer**: Cliente que compra en la tienda (en la tabla CUSTOMER - sin acceso al sistema)
+
+---
+
 erDiagram
     %% ==========================================
     %% 1. IDENTIDAD Y ACCESO

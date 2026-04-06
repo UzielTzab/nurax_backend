@@ -128,7 +128,8 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'utils.authentication.CookieJWTAuthentication',  # 🔒 HttpOnly Cookies
+        'rest_framework_simplejwt.authentication.JWTAuthentication',  # Fallback para API clients con header
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
@@ -148,6 +149,25 @@ SIMPLE_JWT = {
 }
 
 CORS_ALLOWED_ORIGINS = [
+    'http://localhost:5173',
+    'https://nurax.netlify.app',
+]
+
+# ✅ CORS Credentials - Permitir envío de cookies
+CORS_ALLOW_CREDENTIALS = True
+
+# 🔒 HttpOnly Cookies Configuration (OWASP Best Practice)
+SESSION_COOKIE_HTTPONLY = True        # No accesible a JavaScript
+SESSION_COOKIE_SAMESITE = 'Strict'    # CSRF protection
+SESSION_COOKIE_SECURE = not DEBUG      # ✅ True en producción, False en desarrollo
+
+# Same for CSRF cookie (proteger la validación de CSRF tokens)
+CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = 'Strict'
+CSRF_COOKIE_SECURE = not DEBUG
+
+# Agregar fronend a lista de sitios seguros para CSRF
+CSRF_TRUSTED_ORIGINS = [
     'http://localhost:5173',
     'https://nurax.netlify.app',
 ]

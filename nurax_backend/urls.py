@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.urls import path, include
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+from api.auth_views import CustomTokenObtainPairView, CustomTokenRefreshView, LogoutView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -14,9 +14,10 @@ urlpatterns = [
     path('api/v1/expenses/', include('expenses.urls')),
     path('api/v1/carts/', include('carts.urls')),
     
-    # Authentication
-    path('api/auth/login/',   TokenObtainPairView.as_view(),  name='token_obtain'),
-    path('api/auth/refresh/', TokenRefreshView.as_view(),     name='token_refresh'),
+    # Authentication - 🔒 HttpOnly Cookies
+    path('api/auth/login/',   CustomTokenObtainPairView.as_view(),  name='token_obtain'),
+    path('api/auth/logout/',  LogoutView.as_view(),                  name='logout'),
+    path('api/auth/refresh/', CustomTokenRefreshView.as_view(),      name='token_refresh'),
     
     # Documentation
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),

@@ -54,6 +54,16 @@ Bienvenido a la documentación del backend de Nurax. Este directorio contiene to
    - **Duración lectura:** 5-10 minutos
    - **Para quién:** DevOps, Backend developers, Render deploy troubleshooting
 
+### 6. **[BACKEND_IMPLEMENT_HTTPONLY_COOKIES.md](BACKEND_IMPLEMENT_HTTPONLY_COOKIES.md)** - Seguridad: HttpOnly Cookies
+   - 🔒 Migración a HttpOnly cookies (XSS protection)
+   - Implementación completa en Django
+   - Cambios en `settings.py`, `authentication.py`, `accounts/views.py`
+   - Configuración CORS y seguridad
+   - Testing y validación
+   - **Duración lectura:** 20-30 minutos
+   - **Para quién:** Backend developers, Security engineers
+   - **Status:** ⏳ Próxima implementación
+
 ---
 
 ## 🎯 Guía Rápida por Rol
@@ -216,6 +226,8 @@ Esto cubre el 80% de lo que necesitas saber.
 |----------|-----------|-------------------|
 | **Multi-tenant** | AGENT.md | Cada usuario aislado, datos separados |
 | **JWT Auth** | AGENT.md | Autenticación por token (email + password) |
+| **HttpOnly Cookies** | BACKEND_IMPLEMENT_HTTPONLY_COOKIES.md | Tokens seguros, no accesibles a JavaScript |
+| **XSS Protection** | BACKEND_IMPLEMENT_HTTPONLY_COOKIES.md | Mitigación de ataques XSS |
 | **ViewSet** | AGENT.md | Combina CRUD en una clase DRF |
 | **Serializer** | AGENT.md | Convierte modelos ↔ JSON |
 | **Migración** | DEVELOPMENT_GUIDE.md | Cambios de BD versionados |
@@ -273,7 +285,8 @@ http://localhost:8000/api/docs/
 
 ### **"¿Cómo me autentico?"**
 → Ve a [API_ENDPOINTS.md](API_ENDPOINTS.md) - Sección "Autenticación"
-
+### **"¿Cómo está asegurada la autenticación?"**
+→ Ve a [BACKEND_IMPLEMENT_HTTPONLY_COOKIES.md](BACKEND_IMPLEMENT_HTTPONLY_COOKIES.md) - Implementación de HttpOnly cookies
 ### **"¿Cómo hago una migración?"**
 → Ve a [DEVELOPMENT_GUIDE.md](DEVELOPMENT_GUIDE.md) - Sección "Migraciones de BD"
 

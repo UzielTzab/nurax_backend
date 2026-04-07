@@ -13,6 +13,7 @@ User = get_user_model()
 class UserSerializer(serializers.ModelSerializer):
     """Serializer para usuarios - retorna campos esperados por frontend."""
     avatar_file = serializers.ImageField(write_only=True, required=False)
+    store_profile = serializers.SerializerMethodField()
     
     # Método para obtener 'name' como combinación de first_name y last_name
     def get_name(self, obj):
@@ -33,10 +34,46 @@ class UserSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_active', 'name', 'role', 'avatar_url', 'avatar_file']
+        fields = [
+            'id',
+            'username',
+            'email',
+            'first_name',
+            'last_name',
+            'is_active',
+            'name',
+            'role',
+            'avatar_url',
+            'avatar_file',
+            'store_profile',
+        ]
         read_only_fields = ['id']
         extra_kwargs = {
             'avatar_url': {'read_only': True},
+        }
+
+    def get_store_profile(self, obj):
+        """Retorna la tienda activa basada en la membresia del usuario."""
+        membership = (
+            StoreMembership.objects
+            .select_related('store')
+            .filter(user=obj)
+            .order_by('-created_at')
+            .first()
+        )
+        if not membership:
+            return None
+
+        store = membership.store
+        return {
+            'id': str(store.id),
+            'name': store.name,
+            'plan': store.plan,
+            'tax_id': store.tax_id,
+            'active': store.active,
+            'niche': store.niche,
+            'is_first_setup_completed': store.is_first_setup_completed,
+            'default_cash': str(store.default_cash),
         }
 
     def update(self, instance, validated_data):
@@ -93,7 +130,18 @@ class StoreSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Store
-        fields = ['id', 'name', 'plan', 'tax_id', 'active', 'created_at', 'updated_at']
+        fields = [
+            'id',
+            'name',
+            'plan',
+            'tax_id',
+            'niche',
+            'active',
+            'is_first_setup_completed',
+            'default_cash',
+            'created_at',
+            'updated_at'
+        ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
@@ -198,4 +246,28 @@ class StoreWithMembershipsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Store
         fields = ['id', 'name', 'plan', 'tax_id', 'active', 'memberships', 'created_at']
-        read_only_fields = ['id', 'created_at']
+
+
+class OnboardingTiendaSerializer(serializers.Serializer):
+    nombre = serializers.CharField(max_length=200, required=True)
+    identificador_fiscal = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    nicho = serializers.ChoiceField(
+        choices=Store.Niche.choices,
+        required=True
+    )
+
+
+class OnboardingConfiguracionSerializer(serializers.Serializer):
+    fondo_inicial_defecto = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0)
+
+
+class OnboardingProveedorSerializer(serializers.Serializer):
+    incluir = serializers.BooleanField(default=True)
+    nombre = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    telefono = serializers.CharField(max_length=50, required=False, allow_blank=True)
+
+
+class OnboardingWizardSerializer(serializers.Serializer):
+    tienda = OnboardingTiendaSerializer()
+    configuracion = OnboardingConfiguracionSerializer()
+    proveedor_inicial = OnboardingProveedorSerializer()

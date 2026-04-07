@@ -198,6 +198,51 @@ Obtiene todas las tiendas donde el usuario es miembro.
 }
 ```
 
+---
+
+### Onboarding Wizard
+
+#### Create Store + Categories + Supplier
+**POST** `/onboarding/wizard/`
+
+```json
+{
+  "tienda": {
+    "nombre": "Electronica Nurax",
+    "identificador_fiscal": "XAXX010101000",
+    "nicho": "ELECTRONICA"
+  },
+  "configuracion": {
+    "fondo_inicial_defecto": 500.0
+  },
+  "proveedor_inicial": {
+    "incluir": true,
+    "nombre": "TechWholesale Mx",
+    "telefono": "555-123-4567"
+  }
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Wizard completado exitosamente",
+  "store": {
+    "id": "123e4567-e89b-12d3-a456-426614174000",
+    "name": "Electronica Nurax",
+    "plan": "basico",
+    "tax_id": "XAXX010101000",
+    "niche": "ELECTRONICA",
+    "active": true,
+    "is_first_setup_completed": true,
+    "default_cash": "500.00"
+  },
+  "categories_created": 6,
+  "supplier_id": "abcd1234-..."
+}
+```
+
 #### Create Store with Owner (Crear tienda con propietario)
 
 **POST** `/accounts/stores/create-with-owner/` *(Requires Authentication)*

@@ -48,6 +48,12 @@ class Store(models.Model):
     class Plan(models.TextChoices):
         BASICO = 'basico', 'Básico'
         PRO = 'pro', 'Pro'
+
+    class Niche(models.TextChoices):
+        ELECTRONICA = 'ELECTRONICA', 'Electrónica'
+        ABARROTES = 'ABARROTES', 'Abarrotes'
+        FARMACIA = 'FARMACIA', 'Farmacia'
+        FERRETERIA = 'FERRETERIA', 'Ferretería'
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=200, help_text="Nombre de la tienda (Ej: Electrónica Nurax)")
@@ -57,7 +63,20 @@ class Store(models.Model):
         default=Plan.BASICO
     )
     tax_id = models.CharField(max_length=50, blank=True, help_text="RIF/NIT")
+    niche = models.CharField(
+        max_length=20,
+        choices=Niche.choices,
+        blank=True,
+        help_text="Nicho de negocio para categorías sugeridas"
+    )
     active = models.BooleanField(default=True)
+    is_first_setup_completed = models.BooleanField(default=False)
+    default_cash = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        help_text="Fondo inicial sugerido para apertura de caja"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

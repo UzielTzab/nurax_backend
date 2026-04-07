@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from api.auth_views import CustomTokenObtainPairView, CustomTokenRefreshView, LogoutView
+from accounts.views import OnboardingWizardView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -13,6 +14,7 @@ urlpatterns = [
     path('api/v1/inventory/', include('inventory.urls')),
     path('api/v1/expenses/', include('expenses.urls')),
     path('api/v1/carts/', include('carts.urls')),
+    path('api/v1/onboarding/wizard/', OnboardingWizardView.as_view(), name='onboarding-wizard'),
     
     # Authentication - 🔒 HttpOnly Cookies
     path('api/auth/login/',   CustomTokenObtainPairView.as_view(),  name='token_obtain'),

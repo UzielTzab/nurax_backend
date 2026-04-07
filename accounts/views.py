@@ -6,14 +6,16 @@ from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from .models import User, Store, StoreMembership, Client
 from .serializers import (
     UserSerializer, StoreSerializer, StoreMembershipSerializer,
     ClientSerializer, StoreWithMembershipsSerializer, UserRegistrationSerializer,
-    StoreWithOwnerSerializer
+    StoreWithOwnerSerializer, OnboardingWizardSerializer
 )
+from products.models import Category, Supplier
 
 User = get_user_model()
 
@@ -235,6 +237,86 @@ class StoreViewSet(viewsets.ModelViewSet):
         memberships = StoreMembership.objects.filter(store=store)
         serializer = StoreMembershipSerializer(memberships, many=True)
         return Response(serializer.data)
+
+
+class OnboardingWizardView(APIView):
+    """Wizard v2 - crea tienda + categorias + proveedor en un solo request."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = OnboardingWizardSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        user = request.user
+
+        niche_categories = {
+            'ELECTRONICA': ['Cables', 'Cargadores', 'Audio', 'Accesorios', 'Smartphones', 'Computadoras'],
+            'ABARROTES': ['Bebidas', 'Snacks', 'Abarrotes', 'Lacteos', 'Limpieza', 'Higiene'],
+            'FARMACIA': ['Medicamentos', 'Cuidado personal', 'Suplementos', 'Higiene', 'Bebe', 'Primeros auxilios'],
+            'FERRETERIA': ['Herramientas', 'Tornilleria', 'Electricidad', 'Pintura', 'Plomeria', 'Seguridad'],
+        }
+
+        with transaction.atomic():
+            membership = (
+                StoreMembership.objects
+                .select_related('store')
+                .filter(user=user)
+                .order_by('-created_at')
+                .first()
+            )
+
+            if membership:
+                store = membership.store
+            else:
+                store = Store.objects.create(
+                    name=data['tienda']['nombre'],
+                    plan=Store.Plan.BASICO,
+                    tax_id=data['tienda'].get('identificador_fiscal', '')
+                )
+                StoreMembership.objects.create(
+                    store=store,
+                    user=user,
+                    role=StoreMembership.Role.OWNER
+                )
+
+            store.name = data['tienda']['nombre']
+            store.tax_id = data['tienda'].get('identificador_fiscal', '')
+            store.niche = data['tienda']['nicho']
+            store.default_cash = data['configuracion']['fondo_inicial_defecto']
+            store.is_first_setup_completed = True
+            store.save(update_fields=['name', 'tax_id', 'niche', 'default_cash', 'is_first_setup_completed'])
+
+            created_categories = 0
+            for category_name in niche_categories.get(store.niche, []):
+                _, created = Category.objects.get_or_create(
+                    store=store,
+                    name=category_name
+                )
+                if created:
+                    created_categories += 1
+
+            supplier = None
+            supplier_data = data.get('proveedor_inicial', {})
+            if supplier_data.get('incluir') and supplier_data.get('nombre'):
+                supplier, _ = Supplier.objects.get_or_create(
+                    store=store,
+                    name=supplier_data['nombre'],
+                    defaults={
+                        'contact_info': supplier_data.get('telefono', '')
+                    }
+                )
+
+        response_payload = {
+            'success': True,
+            'message': 'Wizard completado exitosamente',
+            'store': StoreSerializer(store).data,
+            'categories_created': created_categories,
+            'supplier_id': str(supplier.id) if supplier else None
+        }
+
+        return Response(response_payload, status=status.HTTP_200_OK)
 
 
 class StoreMembershipViewSet(viewsets.ModelViewSet):

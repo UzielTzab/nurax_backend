@@ -108,13 +108,18 @@ nurax_backend/
   - GET `/products/packagings/?product_id={id}`
   - POST `/products/packagings/` - Crear presentación
 
-### 9. Filtrado Inteligente de Productos
+### 9. Onboarding Wizard (v2)
+- **Capacidad**: Crear tienda + categorias sugeridas + proveedor en un solo request
+- **Endpoint**: POST `/onboarding/wizard/`
+- **Efecto**: Marca `Store.is_first_setup_completed = true` y guarda `default_cash`
+
+### 10. Filtrado Inteligente de Productos
 - **low_stock**: GET `/products/products/low_stock/?threshold=10`
 - **out_of_stock**: GET `/products/products/out_of_stock/`
 - **by_category**: Query param `?category={id}`
 - **search**: Query param `?search=iphone`
 
-### 10. Estado Automático de Ventas
+### 11. Estado Automático de Ventas
 - **PAID**: Cuando `amount_paid >= total_amount`
 - **PARTIAL**: Cuando `0 < amount_paid < total_amount`
 - **CANCELLED**: Manual via PATCH

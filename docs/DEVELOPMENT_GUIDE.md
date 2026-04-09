@@ -128,36 +128,104 @@ python manage.py runserver
 
 ---
 
-## Estructura de Proyecto
+## Estructura de Proyecto (ARCHITECTURE_V2)
 
 ```
-api/
-├── models.py              # 🔴 CRÍTICO - Todos los modelos aquí
-├── views.py               # 🔴 CRÍTICO - Todos los ViewSets aquí
-├── serializers.py         # 🟡 ViewSet serializers
-├── urls.py                # 🟡 Rutas (SimpleRouter)
-├── pagination.py          # 🟢 Custom pagination
-├── admin.py               # 🟢 Django admin
-├── apps.py                # 🟢 Config app
-├── tests.py               # 🟢 Tests
-└── migrations/            # 🟢 Historia BD
-    ├── __init__.py
-    └── 000X_description.py
+apps/                          # 🔴 TODAS las aplicaciones modulares
+├── accounts/                  # Usuarios, Tiendas, Autenticación
+│   ├── models.py              # User, Store, StoreMembership
+│   ├── views.py               # ViewSets, OnboardingWizardView
+│   ├── serializers.py         # Serializers
+│   ├── urls.py                # Rutas REST (SimpleRouter)
+│   ├── admin.py               # Django admin
+│   ├── apps.py                # AppConfig
+│   ├── tests.py               # Tests unitarios
+│   └── migrations/            # Historial de migraciones BD
+├── products/                  # Catálogo de Productos
+│   ├── models.py              # Product, Category, Supplier, ProductCode
+│   ├── views.py               # ProductViewSet, CategoryViewSet
+│   ├── serializers.py
+│   ├── urls.py
+│   ├── admin.py
+│   ├── apps.py
+│   ├── tests.py
+│   └── migrations/
+├── sales/                     # Ventas y Cobros
+│   ├── models.py              # Sale, SaleItem, SalePayment
+│   ├── views.py               # SaleViewSet
+│   ├── serializers.py
+│   ├── urls.py
+│   ├── admin.py
+│   ├── apps.py
+│   ├── tests.py
+│   └── migrations/
+├── inventory/                 # Gestión de Inventario
+│   ├── models.py              # InventoryMovement (audit trail)
+│   ├── views.py               # InventoryViewSet
+│   ├── serializers.py
+│   ├── urls.py
+│   ├── admin.py
+│   ├── apps.py
+│   ├── tests.py
+│   └── migrations/
+├── expenses/                  # Gastos por Corte de Caja
+│   ├── models.py              # Expense, CashShift
+│   ├── views.py               # ExpenseViewSet
+│   ├── serializers.py
+│   ├── urls.py
+│   ├── admin.py
+│   ├── apps.py
+│   ├── tests.py
+│   └── migrations/
+├── carts/                     # Carrito de Compras
+│   ├── models.py              # ActiveCart, CartItem
+│   ├── views.py               # CartViewSet
+│   ├── serializers.py
+│   ├── urls.py
+│   ├── admin.py
+│   ├── apps.py
+│   ├── tests.py
+│   └── migrations/
+└── __init__.py                # Package marker
 
-nurax_backend/
-├── settings.py            # 🔴 Settings principales
-├── urls.py                # 🟡 URLs raíz
-├── asgi.py                # 🟢 ASGI
-└── wsgi.py                # 🟢 WSGI
+core/                          # 🔴 Configuración principal de Django
+├── settings.py                # 🔴 Settings (INSTALLED_APPS, BD, auth, etc.)
+├── urls.py                    # 🟡 URLs raíz (root URLconf)
+├── wsgi.py                    # 🟢 WSGI (para producción)
+├── asgi.py                    # 🟢 ASGI (para async)
+└── __init__.py                # Package marker
+
+utils/                         # 🟡 Funciones compartidas entre apps
+├── authentication.py          # 🔴 CookieJWTAuthentication (HttpOnly cookies)
+├── auth_views.py              # 🔴 CustomTokenObtainPairView, LogoutView
+├── pagination.py              # 🟡 Custom pagination (si es necesario)
+├── exceptions.py              # 🟢 Custom exceptions
+├── __init__.py                # Package marker
+└── (otros archivos compartidos)
+
+config/                        # 📋 Configuración de BD y secretos
+├── postgres.env               # 🔴 Variables del servicio PostgreSQL
+└── postgres.env.example       # Plantilla
+
+docs/                          # 📖 Documentación del proyecto
+├── ARCHITECTURE_NURAX_V2.md
+├── API_ENDPOINTS.md
+├── DATABASE_SCHEMA.md
+├── DEVELOPMENT_GUIDE.md
+└── (otros .md)
 
 Raíz:
-├── manage.py              # 🟡 Django CLI
-├── requirements.txt       # 🔴 Dependencias
-├── docker-compose.yml     # 🟡 Docker config
-├── Dockerfile             # 🟡 Docker image
-├── init_db.py             # 🟡 Script inicialización
-├── populate_db.py         # 🟢 Datos prueba
-└── README.md              # 📖 Documentación uso
+├── manage.py                  # 🟡 Django CLI (ya configurado con core.settings)
+├── requirements.txt           # 🔴 Dependencias Python
+├── .env                       # 🔴 Variables de entorno (NO commitear)
+├── .env.example               # 📋 Plantilla de .env
+├── docker-compose.yml         # 🟡 Docker Compose config
+├── Dockerfile                 # 🟡 Imagen Docker
+├── init_db.py                 # 🟡 Script inicialización (crear superuser)
+├── README.md                  # 📖 Documentación use
+└── db.sqlite3                 # 🟢 BD local (si no usa Docker)
+
+db.sqlite3 (desarrollo)        # 🟢 Base de datos SQLite local
 ```
 
 **Colores:**
@@ -165,46 +233,26 @@ Raíz:
 - 🟡 **IMPORTANTE**: Ocasionalmente
 - 🟢 **NORMAL**: Rara vez
 
+**🆕 CAMBIOS en esta versión:**
+- ✅ Apps organizadas en carpeta `apps/` (mejor scalability)
+- ✅ Configuración centralizada en `core/` (nunca más `nurax_backend/`)
+- ✅ HttpOnly cookies en `utils/authentication.py` (OWASP security)
+- ✅ Cada app es completamente independiente (fácil desacoplar)
+
 ---
 
 ## Crear Nuevas Features
 
 ### **Checklist: Agregar un Modelo**
 
-#### **1. Definir el Modelo** (`api/models.py`)
+## Crear Nuevas Features (ARCHITECTURE_V2)
+
+### **Pasos para agregar un nuevo Modelo**
+
+#### **1️⃣ Definir el Modelo** (`apps/myapp/models.py`)
 
 ```python
-class MyModel(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    name = models.CharField(max_length=200)
-    description = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    def __str__(self):
-        return self.name
-```
-
-**Convenciones:**
-- Siempre incluir `user = ForeignKey(User)` para multi-tenant
-- Siempre incluir `created_at`, `updated_at`
-- Implementar `__str__()`
-
-#### **2. Crear Serializer** (`api/serializers.py`)
-
-```python
-class MyModelSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = MyModel
-        fields = ['id', 'name', 'description', 'created_at', 'user']
-        read_only_fields = ['created_at', 'user']
-```
-
-#### **Crear Nuevas Features - ARCHITECTURE_V2 Pattern**
-
-##### **1. Crear Modelo** (`app/models.py`)
-
-```python
+# apps/myapp/models.py
 from django.db import models
 from django.core.validators import MinValueValidator
 from decimal import Decimal
@@ -212,8 +260,8 @@ import uuid
 
 class MyModel(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    store = models.ForeignKey('accounts.Store', on_delete=models.CASCADE)  # 🔴 SIEMPRE para multi-tenancy
-    user = models.ForeignKey('accounts.User', on_delete=models.PROTECT)     # Quien lo creó
+    store = models.ForeignKey('apps.accounts.Store', on_delete=models.CASCADE)  # ← MULTI-TENANCY
+    user = models.ForeignKey('apps.accounts.User', on_delete=models.PROTECT)    # ← Quien crear
     
     name = models.CharField(max_length=100)
     amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
@@ -222,17 +270,26 @@ class MyModel(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
+        app_label = 'myapp'  # ← Necesario si el modelo va a otro formato
         ordering = ['-created_at']
-        verbose_name_plural = 'My Models'
-        unique_together = ('store', 'name')  # Unicidad por tienda
+        unique_together = ('store', 'name')  # ← Unicidad por tienda
     
     def __str__(self) -> str:
         return f"{self.store.name} - {self.name}"
 ```
 
-##### **2. Crear Serializer** (`app/serializers.py`)
+**Convenciones ARCHITECTURE_V2:**
+- ✅ Siempre incluir `store = ForeignKey('apps.accounts.Store')` para multi-tenancy
+- ✅ Siempre incluir `user = ForeignKey('apps.accounts.User')` para auditoría
+- ✅ Siempre incluir `created_at`, `updated_at` para timestamps
+- ✅ Implementar `__str__()`
+- ✅ Es mejor usar UUID como primary key (no pk INTEGER)
+- ✅ Usar `on_delete=models.PROTECT` para ForeignKeys críticas (prevención de cascada accidental)
+
+#### **2️⃣ Crear Serializer** (`apps/myapp/serializers.py`)
 
 ```python
+# apps/myapp/serializers.py
 from rest_framework import serializers
 from .models import MyModel
 from decimal import Decimal
@@ -244,18 +301,20 @@ class MyModelSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
     
     def validate_amount(self, value: Decimal) -> Decimal:
-        """Asegurar que amount sea positivo."""
+        """Validar que amount sea positivo."""
         if value <= 0:
             raise serializers.ValidationError("Amount debe ser mayor a 0")
         return value
 ```
 
-##### **3. Crear ViewSet** (`app/views.py`) - CON MULTI-TENANCY
+#### **3️⃣ Crear ViewSet** (`apps/myapp/views.py`)
 
 ```python
+# apps/myapp/views.py
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from apps.accounts.models import StoreMembership  # ← Import desde apps.xxx
 from .models import MyModel
 from .serializers import MyModelSerializer
 
@@ -264,19 +323,23 @@ class MyModelViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        """🔴 CRÍTICO: Filtrar por tiendas del usuario para multi-tenancy"""
+        """🔴 CRÍTICO: Filtrar por tiendas del usuario (MULTI-TENANCY)"""
         user_stores = self.request.user.storemembership_set.values_list('store_id', flat=True)
         return MyModel.objects.filter(store_id__in=user_stores)
     
     def perform_create(self, serializer):
-        """🔴 CRÍTICO: Asignar store desde request query param"""
+        """🔴 CRÍTICO: Asignar store desde query param y validar acceso"""
         store_id = self.request.query_params.get('store_id')
         if not store_id:
             return Response({'error': 'store_id required'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Verificar que usuario tiene acceso a esta tienda
-        user_store_ids = self.request.user.storemembership_set.values_list('store_id', flat=True)
-        if str(store_id) not in [str(s) for s in user_store_ids]:
+        # Validar que usuario tiene acceso a esta tienda
+        has_access = StoreMembership.objects.filter(
+            user=self.request.user,
+            store_id=store_id
+        ).exists()
+        
+        if not has_access:
             return Response({'error': 'No access to this store'}, status=status.HTTP_403_FORBIDDEN)
         
         serializer.save(store_id=store_id, user=self.request.user)
@@ -285,19 +348,53 @@ class MyModelViewSet(viewsets.ModelViewSet):
     def custom_action(self, request, pk=None):
         """Ejemplo de custom action."""
         obj = self.get_object()
-        # Hacer algo
+        # Hacer algo con obj
         return Response({'status': 'ok'})
 ```
 
-##### **4. Registrar Ruta** (`app/urls.py`)
+#### **4️⃣ Registrar URLs** (`apps/myapp/urls.py`)
 
 ```python
+# apps/myapp/urls.py
 from django.urls import path, include
 from rest_framework.routers import SimpleRouter
 from .views import MyModelViewSet
 
 router = SimpleRouter()
 router.register(r'my-models', MyModelViewSet, basename='mymodel')
+
+urlpatterns = [
+    path('', include(router.urls)),
+]
+```
+
+#### **5️⃣ Agregar a URLconf principal** (`core/urls.py`)
+
+```python
+# core/urls.py - AGREGAR ESTA LÍNEA:
+path('api/v1/myapp/', include('apps.myapp.urls')),
+```
+
+#### **6️⃣ Agregar a INSTALLED_APPS** (`core/settings.py`)
+
+```python
+# core/settings.py - INSTALLED_APPS:
+INSTALLED_APPS = [
+    ...
+    'apps.myapp.apps.MyappConfig',  # ← AGREGAR
+]
+```
+
+#### **7️⃣ Crear Migraciones**
+
+```bash
+# Dentro del contenedor Docker O en local:
+python manage.py makemigrations myapp
+python manage.py migrate
+
+# Verificar que no hay errores:
+python manage.py check
+```
 
 urlpatterns = [
     path('', include(router.urls)),

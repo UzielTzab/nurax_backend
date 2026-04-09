@@ -2,6 +2,7 @@
 Serializadores para la app Products.
 ARCHITECTURE_V2: Catálogo, categorías, proveedores y códigos de producto.
 """
+from decimal import Decimal
 from rest_framework import serializers
 from .models import Product, Category, Supplier, ProductPackaging, ProductCode
 
@@ -58,6 +59,21 @@ class ProductSerializer(serializers.ModelSerializer):
             'packagings', 'codes', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'store': {'required': False},
+            'category': {'required': False, 'allow_null': True},
+            'supplier': {'required': False, 'allow_null': True},
+            'base_cost': {'required': False},
+            'sale_price': {'required': False},
+            'current_stock': {'required': False},
+        }
+
+    def create(self, validated_data):
+        """Permite creación rápida con defaults cuando faltan campos financieros."""
+        validated_data.setdefault('base_cost', Decimal('0.00'))
+        validated_data.setdefault('sale_price', Decimal('0.01'))
+        validated_data.setdefault('current_stock', 0)
+        return super().create(validated_data)
     
     def validate_base_cost(self, value):
         """Validar que el costo base sea no negativo."""
@@ -73,8 +89,10 @@ class ProductSerializer(serializers.ModelSerializer):
     
     def validate(self, data):
         """Validación adicional entre campos."""
-        if data.get('base_cost') and data.get('sale_price'):
-            if data['base_cost'] > data['sale_price']:
+        base_cost = data.get('base_cost')
+        sale_price = data.get('sale_price')
+        if base_cost is not None and sale_price is not None:
+            if base_cost > sale_price:
                 raise serializers.ValidationError(
                     "El costo base no puede ser mayor que el precio de venta"
                 )

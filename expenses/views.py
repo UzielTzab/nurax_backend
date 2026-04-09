@@ -6,6 +6,7 @@ from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from .models import (
     Expense, CashShift, CashMovement, ExpenseCategory,
@@ -34,6 +35,54 @@ class CashShiftViewSet(viewsets.ModelViewSet):
             user=self.request.user
         ).values_list('store_id', flat=True)
         return CashShift.objects.filter(store_id__in=stores)
+
+    def perform_create(self, serializer):
+        """Crear turno validando membresía y evitando doble turno abierto por tienda."""
+        from accounts.models import StoreMembership
+
+        store = serializer.validated_data.get('store')
+        if store is None:
+            raise ValidationError({'store': 'store es requerido'})
+
+        is_admin = getattr(self.request.user, 'role', None) == 'admin'
+        is_member = StoreMembership.objects.filter(user=self.request.user, store=store).exists()
+
+        if not is_admin and not is_member:
+            raise PermissionDenied('No tienes acceso a esta tienda.')
+
+        has_open_shift = CashShift.objects.filter(store=store, closed_at__isnull=True).exists()
+        if has_open_shift:
+            raise ValidationError({'detail': 'Ya existe un turno abierto para esta tienda.'})
+
+        serializer.save(opened_by=self.request.user)
+
+    @action(detail=False, methods=['post'], url_path='open')
+    def open(self, request):
+        """Compatibilidad legacy: permite abrir turno vía /cash-shifts/open/."""
+        from accounts.models import StoreMembership
+
+        payload = request.data.copy()
+        store_id = payload.get('store')
+
+        # Para clientes legacy que solo envían starting_cash, inferimos tienda por membresía.
+        if not store_id:
+            membership = StoreMembership.objects.filter(user=request.user).select_related('store').first()
+            if membership:
+                store_id = str(membership.store_id)
+                payload['store'] = store_id
+
+        if not store_id:
+            return Response(
+                {'error': 'store es requerido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = self.get_serializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
     
     @action(detail=False, methods=['get'])
     def current_open(self, request):

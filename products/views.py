@@ -2,10 +2,12 @@
 Vistas para la app Products.
 ARCHITECTURE_V2: Catálogo, categorías, proveedores y códigos.
 """
+import uuid
 from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from .models import Product, Category, Supplier, ProductPackaging, ProductCode
 from .serializers import (
     ProductSerializer, CategorySerializer, SupplierSerializer,
@@ -59,13 +61,95 @@ class ProductViewSet(viewsets.ModelViewSet):
     search_fields = ['name']
     ordering_fields = ['name', 'created_at', 'current_stock', 'sale_price']
     ordering = ['-created_at']
+
+    @staticmethod
+    def _is_valid_uuid(value):
+        if value in (None, '', 'null', 'undefined'):
+            return False
+        try:
+            uuid.UUID(str(value))
+            return True
+        except (ValueError, TypeError, AttributeError):
+            return False
+
+    def _normalize_payload(self, data):
+        """Normaliza payload legacy para crear/editar productos sin errores por campos antiguos."""
+        payload = data.copy()
+
+        # Legacy frontend puede enviar "stock" en lugar de "current_stock".
+        if payload.get('current_stock') in (None, '') and payload.get('stock') not in (None, ''):
+            payload['current_stock'] = payload.get('stock')
+
+        # "sku" no existe en el modelo Product V2 (se maneja en ProductCode).
+        payload.pop('sku', None)
+
+        # category/supplier deben ser UUID en V2. Si llegan como legacy int/string inválido, omitir.
+        category = payload.get('category')
+        if category in (None, '', 'null', 'undefined') or not self._is_valid_uuid(category):
+            payload.pop('category', None)
+
+        supplier = payload.get('supplier')
+        if supplier in (None, '', 'null', 'undefined') or not self._is_valid_uuid(supplier):
+            payload.pop('supplier', None)
+
+        # Limpiar campo legacy si vino junto al payload.
+        payload.pop('stock', None)
+        return payload
     
     def get_queryset(self):
-        """Filtrar productos por tienda."""
-        store_id = self.request.query_params.get('store_id')
-        if store_id:
-            return Product.objects.filter(store_id=store_id)
-        return Product.objects.none()
+        """Filtrar productos por membresías del usuario (y opcionalmente por store_id)."""
+        from accounts.models import StoreMembership
+
+        requested_store_id = self.request.query_params.get('store_id')
+        memberships = StoreMembership.objects.filter(user=self.request.user)
+
+        if requested_store_id:
+            is_member = memberships.filter(store_id=requested_store_id).exists()
+            is_admin = getattr(self.request.user, 'role', None) == 'admin'
+            if not is_admin and not is_member:
+                return Product.objects.none()
+            return Product.objects.filter(store_id=requested_store_id)
+
+        store_ids = memberships.values_list('store_id', flat=True)
+        return Product.objects.filter(store_id__in=store_ids)
+
+    def perform_create(self, serializer):
+        """Asignar tienda automáticamente y validar acceso del usuario."""
+        from accounts.models import StoreMembership
+
+        store = serializer.validated_data.get('store')
+        memberships = StoreMembership.objects.filter(user=self.request.user)
+        is_admin = getattr(self.request.user, 'role', None) == 'admin'
+
+        if store is None:
+            membership = memberships.select_related('store').first()
+            if not membership:
+                raise ValidationError({'store': 'No tienes una tienda asociada para crear productos.'})
+            serializer.save(store=membership.store)
+            return
+
+        is_member = memberships.filter(store=store).exists()
+        if not is_admin and not is_member:
+            raise PermissionDenied('No tienes acceso a esta tienda.')
+
+        serializer.save()
+
+    def create(self, request, *args, **kwargs):
+        normalized = self._normalize_payload(request.data)
+        serializer = self.get_serializer(data=normalized)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        normalized = self._normalize_payload(request.data)
+        serializer = self.get_serializer(instance, data=normalized, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
     
     @action(detail=False, methods=['get'])
     def low_stock(self, request):

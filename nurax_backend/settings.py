@@ -39,8 +39,6 @@ INSTALLED_APPS = [
     'inventory.apps.InventoryConfig',
     'expenses.apps.ExpensesConfig',
     'carts.apps.CartsConfig',
-    # Legacy
-    'api',
 ]
 
 MIDDLEWARE = [

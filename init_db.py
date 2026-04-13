@@ -6,8 +6,17 @@ django.setup()
 
 from apps.products.models import Category
 from apps.accounts.models import User, Store
+from django.db import connection
 
 print("--- Iniciando poblado de base de datos de producción ---")
+
+# Diagnóstico seguro de conexión (sin exponer credenciales)
+db_settings = connection.settings_dict
+print(
+    f"[DB] Engine={db_settings.get('ENGINE')} "
+    f"Host={db_settings.get('HOST') or 'local-file'} "
+    f"Name={db_settings.get('NAME')}"
+)
 
 # 0. Crear o obtener Store predeterminado para V2 (multi-tenant)
 store_default, store_created = Store.objects.get_or_create(

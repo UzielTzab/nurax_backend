@@ -17,6 +17,10 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
 
+def _split_csv_env(name: str, default: str = ''):
+    raw = os.getenv(name, default)
+    return [item.strip() for item in raw.split(',') if item.strip()]
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -147,29 +151,35 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
 }
 
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
-    'https://nurax.netlify.app',
+CORS_ALLOWED_ORIGINS = _split_csv_env(
+    'CORS_ALLOWED_ORIGINS',
+    'http://localhost:5173,https://nurax.netlify.app'
+)
+
+# Permitir previews de Netlify sin tener que actualizar settings en cada deploy.
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.netlify\.app$",
 ]
 
 # ✅ CORS Credentials - Permitir envío de cookies
 CORS_ALLOW_CREDENTIALS = True
 
 # 🔒 HttpOnly Cookies Configuration (OWASP Best Practice)
-SESSION_COOKIE_HTTPONLY = True        # No accesible a JavaScript
-SESSION_COOKIE_SAMESITE = 'Strict'    # CSRF protection
-SESSION_COOKIE_SECURE = not DEBUG      # ✅ True en producción, False en desarrollo
+# Nota: En producción (Netlify -> Render) se requiere SameSite=None para cookies cross-site.
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = os.getenv('SESSION_COOKIE_SAMESITE', 'Lax' if DEBUG else 'None')
+SESSION_COOKIE_SECURE = not DEBUG
 
-# Same for CSRF cookie (proteger la validación de CSRF tokens)
+# Same for CSRF cookie
 CSRF_COOKIE_HTTPONLY = True
-CSRF_COOKIE_SAMESITE = 'Strict'
+CSRF_COOKIE_SAMESITE = os.getenv('CSRF_COOKIE_SAMESITE', 'Lax' if DEBUG else 'None')
 CSRF_COOKIE_SECURE = not DEBUG
 
-# Agregar fronend a lista de sitios seguros para CSRF
-CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:5173',
-    'https://nurax.netlify.app',
-]
+# Agregar frontend a lista de sitios seguros para CSRF
+CSRF_TRUSTED_ORIGINS = _split_csv_env(
+    'CSRF_TRUSTED_ORIGINS',
+    'http://localhost:5173,https://nurax.netlify.app,https://*.netlify.app'
+)
 
 CLOUDINARY_STORAGE = {
     'CLOUD_NAME': os.getenv('CLOUDINARY_CLOUD_NAME'),

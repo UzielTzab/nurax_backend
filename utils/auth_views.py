@@ -4,6 +4,7 @@ Implements JWT authentication using secure HttpOnly cookies (OWASP best practice
 """
 from datetime import timedelta
 from django.http import JsonResponse
+from django.conf import settings
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
@@ -37,8 +38,8 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                 access_token,
                 max_age=int(timedelta(hours=8).total_seconds()),  # 8 hours
                 httponly=True,
-                secure=not request.META.get('DEBUG', False),  # HTTPS in production
-                samesite='Strict',
+                secure=settings.SESSION_COOKIE_SECURE,
+                samesite=settings.SESSION_COOKIE_SAMESITE,
                 path='/',
             )
             response.set_cookie(
@@ -46,8 +47,8 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                 refresh_token,
                 max_age=int(timedelta(days=7).total_seconds()),  # 7 days
                 httponly=True,
-                secure=not request.META.get('DEBUG', False),
-                samesite='Strict',
+                secure=settings.SESSION_COOKIE_SECURE,
+                samesite=settings.SESSION_COOKIE_SAMESITE,
                 path='/',
             )
             
@@ -93,8 +94,8 @@ class CustomTokenRefreshView(TokenRefreshView):
                 new_access_token,
                 max_age=int(timedelta(hours=8).total_seconds()),
                 httponly=True,
-                secure=not request.META.get('DEBUG', False),
-                samesite='Strict',
+                secure=settings.SESSION_COOKIE_SECURE,
+                samesite=settings.SESSION_COOKIE_SAMESITE,
                 path='/',
             )
             
@@ -123,12 +124,14 @@ class LogoutView(APIView):
         # Delete cookies by setting Max-Age=0
         response.delete_cookie(
             'access_token',
-            samesite='Strict',
+            samesite=settings.SESSION_COOKIE_SAMESITE,
+            secure=settings.SESSION_COOKIE_SECURE,
             path='/',
         )
         response.delete_cookie(
             'refresh_token',
-            samesite='Strict',
+            samesite=settings.SESSION_COOKIE_SAMESITE,
+            secure=settings.SESSION_COOKIE_SECURE,
             path='/',
         )
         

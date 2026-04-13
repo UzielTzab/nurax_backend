@@ -64,6 +64,14 @@ Bienvenido a la documentación del backend de Nurax. Este directorio contiene to
    - **Para quién:** Backend developers, Security engineers
    - **Status:** ⏳ Próxima implementación
 
+### 7. **[DEPLOYMENT_TROUBLESHOOTING.md](DEPLOYMENT_TROUBLESHOOTING.md)** - Incidentes de Deploy en Producción
+   - 🐛 Caso 1: `ModuleNotFoundError` tras reestructuración (`nurax_backend` → `core`)
+   - 🔐 Caso 2: Login falla en producción por cookies cross-site (`SameSite=Strict`)
+   - Checklist Render + Netlify para validar CORS/CSRF/cookies
+   - Variables de entorno recomendadas para evitar regresiones
+   - **Duración lectura:** 10-15 minutos
+   - **Para quién:** DevOps, Backend developers, incident response
+
 ---
 
 ## 🎯 Guía Rápida por Rol

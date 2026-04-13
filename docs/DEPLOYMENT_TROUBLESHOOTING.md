@@ -128,3 +128,79 @@ Cuando restructures Django a nueva arquitectura:
 2. **Verificar Dashboard de Render** - es donde Render realmente busca el comando
 3. Si cambias la estructura del proyecto, actualiza todos los references de módulos
 4. Hacer test en local primero: `gunicorn core.wsgi:application`
+
+---
+
+## Caso 2: Login falla en producción pero DB sí tiene usuario/categorías
+
+### 📋 Síntoma
+
+En Render logs:
+- `migrate` e `init_db.py` se ejecutan correctamente
+- Se crean categorías y superusuario
+- Diagnóstico DB muestra PostgreSQL/Neon correcto
+
+En frontend (Netlify):
+- Login no se mantiene
+- Requests en rojo:
+  - `POST /api/auth/refresh/` → `401`
+  - `POST /api/auth/logout/` → `401`
+
+### 🔍 Raíz Causa
+
+Cookies JWT configuradas con `SameSite=Strict` en producción.
+
+Con arquitectura Netlify (frontend) + Render (backend), el flujo de autenticación es **cross-site**.
+`SameSite=Strict` bloquea el envío de cookies en este escenario, por lo que el backend no recibe `refresh_token`/`access_token` y responde 401.
+
+### ✅ Solución Implementada
+
+#### 1) Ajustar SameSite para producción
+
+En `core/settings.py`:
+
+- `SESSION_COOKIE_SAMESITE = 'None'` en producción
+- `CSRF_COOKIE_SAMESITE = 'None'` en producción
+- mantener `SESSION_COOKIE_SECURE = True` y `CSRF_COOKIE_SECURE = True` cuando `DEBUG=False`
+
+#### 2) Hacer CORS/CSRF configurables por variables de entorno
+
+- `CORS_ALLOWED_ORIGINS` por env (CSV)
+- `CSRF_TRUSTED_ORIGINS` por env (CSV)
+- regex para previews de Netlify: `^https://.*\.netlify\.app$`
+
+#### 3) Unificar atributos de cookie en las vistas auth
+
+En `utils/auth_views.py`, `set_cookie/delete_cookie` usan settings globales:
+- `secure=settings.SESSION_COOKIE_SECURE`
+- `samesite=settings.SESSION_COOKIE_SAMESITE`
+
+### 🧪 Verificación de que quedó bien
+
+1. En Render logs, confirmar DB:
+   - `[DB] Engine=django.db.backends.postgresql`
+   - Host Neon correcto
+2. En browser Network:
+   - Login devuelve `Set-Cookie` para `access_token` y `refresh_token`
+   - `/api/auth/refresh/` deja de responder 401 por falta de cookie
+3. En frontend:
+   - sesión persiste tras login
+   - logout no requiere segundo intento
+
+### ⚙️ Variables recomendadas (Render backend)
+
+- `DEBUG=False`
+- `SESSION_COOKIE_SAMESITE=None`
+- `CSRF_COOKIE_SAMESITE=None`
+- `CORS_ALLOWED_ORIGINS=https://<tu-front>.netlify.app`
+- `CSRF_TRUSTED_ORIGINS=https://<tu-front>.netlify.app,https://*.netlify.app`
+
+### ⚙️ Variables recomendadas (Netlify frontend)
+
+- `VITE_API_BASE_URL=https://<tu-backend>.onrender.com/api`
+
+### Cambio de Referencia
+
+- **Commit:** `f57aa8d`
+- **Tipo:** `fix`
+- **Resumen:** habilita cookies cross-site seguras para login Netlify↔Render

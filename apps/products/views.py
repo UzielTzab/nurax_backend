@@ -66,6 +66,32 @@ class SupplierViewSet(viewsets.ModelViewSet):
         if store_id:
             return Supplier.objects.filter(store_id=store_id)
         return Supplier.objects.none()
+    
+    def create(self, request, *args, **kwargs):
+        """Crear proveedor asignando automáticamente la tienda del usuario."""
+        from apps.accounts.models import StoreMembership
+        
+        payload = request.data.copy()
+        store_id = payload.get('store')
+        
+        # Si no se envía store, inferir la tienda por membresía del usuario
+        if not store_id:
+            membership = StoreMembership.objects.filter(user=request.user).select_related('store').first()
+            if membership:
+                store_id = str(membership.store_id)
+                payload['store'] = store_id
+        
+        if not store_id:
+            return Response(
+                {'error': 'No se encontró una tienda asociada al usuario'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = self.get_serializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
 
 @extend_schema_view(

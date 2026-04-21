@@ -44,10 +44,34 @@ class Supplier(models.Model):
         related_name='suppliers'
     )
     name = models.CharField(max_length=200, help_text="Nombre del proveedor")
+    contact_person = models.CharField(
+        max_length=150,
+        blank=True,
+        help_text="Nombre de la persona de contacto"
+    )
+    phone = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="Número de teléfono del proveedor"
+    )
+    email = models.EmailField(
+        blank=True,
+        help_text="Email del proveedor"
+    )
+    website = models.URLField(
+        max_length=255,
+        blank=True,
+        help_text="Sitio web del proveedor"
+    )
+    address = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Dirección del proveedor"
+    )
     contact_info = models.CharField(
         max_length=255,
         blank=True,
-        help_text="Teléfono, email o datos de contacto"
+        help_text="Teléfono, email o datos de contacto (legacy)"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

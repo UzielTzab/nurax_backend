@@ -21,8 +21,20 @@ class SupplierSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Supplier
-        fields = ['id', 'store', 'name', 'contact_info', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        fields = [
+            'id',
+            'store',
+            'name',
+            'contact_person',
+            'phone',
+            'email',
+            'website',
+            'address',
+            'contact_info',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
 
 class ProductPackagingSerializer(serializers.ModelSerializer):

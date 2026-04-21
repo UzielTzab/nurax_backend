@@ -67,10 +67,68 @@ Bienvenido a la documentación del backend de Nurax. Este directorio contiene to
 ### 7. **[DEPLOYMENT_TROUBLESHOOTING.md](DEPLOYMENT_TROUBLESHOOTING.md)** - Incidentes de Deploy en Producción
    - 🐛 Caso 1: `ModuleNotFoundError` tras reestructuración (`nurax_backend` → `core`)
    - 🔐 Caso 2: Login falla en producción por cookies cross-site (`SameSite=Strict`)
+   - 🔁 Caso 3: Frontend sin proxy real (Netlify rewrites para `/api/*`)
    - Checklist Render + Netlify para validar CORS/CSRF/cookies
    - Variables de entorno recomendadas para evitar regresiones
    - **Duración lectura:** 10-15 minutos
    - **Para quién:** DevOps, Backend developers, incident response
+
+### 8. **[SWAGGER_TAGS_ORGANIZATION.md](SWAGGER_TAGS_ORGANIZATION.md)** - Documentación API en Swagger
+   - 📚 Organización de endpoints por tags (categorías)
+   - Listado completo de tags implementados
+   - Endpoints agrupados por módulo (Productos, Ventas, Usuarios, etc.)
+   - Estructura visual de navegación en Swagger/OpenAPI
+   - **Duración lectura:** 10-15 minutos
+   - **Para quién:** API consumers, Frontend developers, QA, Documentación
+
+### 9. **[SWAGGER_IMPLEMENTATION_SUMMARY.md](SWAGGER_IMPLEMENTATION_SUMMARY.md)** - Implementación Técnica de Tags
+   - 🔧 Cambios técnicos realizados en cada ViewSet
+   - Uso de `@extend_schema_view` y `@extend_schema` de drf-spectacular
+   - Archivo por archivo de las modificaciones
+   - Ejemplos de antes/después
+   - Beneficios y próximas mejoras opcionales
+   - **Duración lectura:** 15-20 minutos
+   - **Para quién:** Backend developers, Architecture review
+
+### 10. **[SWAGGER_VISUAL_PREVIEW.md](SWAGGER_VISUAL_PREVIEW.md)** - Vista Previa Visual de Swagger
+   - 🖥️ Cómo se ve la interfaz de Swagger con los tags
+   - Estructura organizacional visual
+   - Ejemplo de interacción usuario
+   - Estadísticas de endpoints
+   - Cómo acceder en desarrollo y producción
+   - Próximas mejoras opcionales
+   - **Duración lectura:** 10 minutos
+   - **Para quién:** API consumers, Frontend developers, QA
+
+### 11. **[SWAGGER_TAGS_CHECKLIST.md](SWAGGER_TAGS_CHECKLIST.md)** - Checklist de Verificación
+   - ✅ Lista completa de items a validar
+   - Verificación de código (imports, decoradores)
+   - Verificación en desarrollo (sintaxis, servidor)
+   - Verificación visual en Swagger (tags, endpoints)
+   - Pruebas de interacción
+   - Validación de cambios en Git
+   - **Duración lectura:** 15 minutos (para ejecutar)
+   - **Para quién:** QA, Backend developers, DevOps
+
+### 12. **[SWAGGER_IMPLEMENTATION_COMPLETE.md](SWAGGER_IMPLEMENTATION_COMPLETE.md)** - Resumen Ejecutivo
+   - 🎯 Visión general de todo lo implementado
+   - Números y estadísticas de la implementación
+   - Beneficios inmediatos
+   - Cambios principales (antes/después)
+   - Lista de archivos modificados
+   - Instrucciones de verificación
+   - **Duración lectura:** 5-10 minutos
+   - **Para quién:** Product manager, Team leads, Stakeholders
+
+### 13. **[SWAGGER_QUICK_REFERENCE.md](SWAGGER_QUICK_REFERENCE.md)** - Referencia Rápida
+   - 🏷️ Vista rápida de todos los 21 tags
+   - Tabla con cantidad de endpoints
+   - Atajos y tips profesionales
+   - Flujo típico de usuario
+   - URLs directas
+   - Notas de seguridad
+   - **Duración lectura:** 3-5 minutos
+   - **Para quién:** API consumers, Frontend developers, Testing
 
 ---
 
@@ -104,9 +162,13 @@ Bienvenido a la documentación del backend de Nurax. Este directorio contiene to
 ### **🎨 Frontend Developer**
 
 **Solo necesitas:**
+- [SWAGGER_TAGS_ORGANIZATION.md](SWAGGER_TAGS_ORGANIZATION.md) - Endpoints organizados por categoría (mejor que leer lista plana)
 - [API_ENDPOINTS.md](API_ENDPOINTS.md) - Todos los endpoints disponibles
 - [AGENT.md](AGENT.md) - Sección "Domain Context" para conceptos de negocio
 - El diagrama ERD en [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) para entender datos
+
+**También disponible:**
+- `http://localhost:8000/api/docs/` - UI interactiva de Swagger/OpenAPI para probar endpoints
 
 **No necesitas:** DEVELOPMENT_GUIDE.md (a menos que quieras contribuir al backend)
 
@@ -289,7 +351,12 @@ http://localhost:8000/api/docs/
 → Ve a [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) - Diagrama ERD
 
 ### **"¿Cuáles son los endpoints disponibles?"**
-→ Lee [API_ENDPOINTS.md](API_ENDPOINTS.md)
+→ Lee [SWAGGER_TAGS_ORGANIZATION.md](SWAGGER_TAGS_ORGANIZATION.md) para ver endpoints organizados por categoría
+→ O abre `http://localhost:8000/api/docs/` para UI interactiva de Swagger
+
+### **"¿Cómo se organiza la documentación de API en Swagger?"**
+→ Ve a [SWAGGER_TAGS_ORGANIZATION.md](SWAGGER_TAGS_ORGANIZATION.md) - Organización por tags
+→ Ve a [SWAGGER_IMPLEMENTATION_SUMMARY.md](SWAGGER_IMPLEMENTATION_SUMMARY.md) - Detalles técnicos de implementación
 
 ### **"¿Cómo me autentico?"**
 → Ve a [API_ENDPOINTS.md](API_ENDPOINTS.md) - Sección "Autenticación"

@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from drf_spectacular.utils import extend_schema_view, extend_schema
 from .models import Product, Category, Supplier, ProductPackaging, ProductCode
 from .serializers import (
     ProductSerializer, CategorySerializer, SupplierSerializer,
@@ -15,6 +16,14 @@ from .serializers import (
 )
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Categorías"]),
+    create=extend_schema(tags=["Categorías"]),
+    retrieve=extend_schema(tags=["Categorías"]),
+    update=extend_schema(tags=["Categorías"]),
+    partial_update=extend_schema(tags=["Categorías"]),
+    destroy=extend_schema(tags=["Categorías"]),
+)
 class CategoryViewSet(viewsets.ModelViewSet):
     """ViewSet para categorías de una tienda."""
     
@@ -36,6 +45,14 @@ class CategoryViewSet(viewsets.ModelViewSet):
             serializer.save()
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Proveedores"]),
+    create=extend_schema(tags=["Proveedores"]),
+    retrieve=extend_schema(tags=["Proveedores"]),
+    update=extend_schema(tags=["Proveedores"]),
+    partial_update=extend_schema(tags=["Proveedores"]),
+    destroy=extend_schema(tags=["Proveedores"]),
+)
 class SupplierViewSet(viewsets.ModelViewSet):
     """ViewSet para proveedores de una tienda."""
     
@@ -51,6 +68,16 @@ class SupplierViewSet(viewsets.ModelViewSet):
         return Supplier.objects.none()
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Productos"]),
+    create=extend_schema(tags=["Productos"]),
+    retrieve=extend_schema(tags=["Productos"]),
+    update=extend_schema(tags=["Productos"]),
+    partial_update=extend_schema(tags=["Productos"]),
+    destroy=extend_schema(tags=["Productos"]),
+    low_stock=extend_schema(tags=["Productos"]),
+    out_of_stock=extend_schema(tags=["Productos"]),
+)
 class ProductViewSet(viewsets.ModelViewSet):
     """ViewSet para gestión de productos."""
     
@@ -167,6 +194,14 @@ class ProductViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Empaques de Producto"]),
+    create=extend_schema(tags=["Empaques de Producto"]),
+    retrieve=extend_schema(tags=["Empaques de Producto"]),
+    update=extend_schema(tags=["Empaques de Producto"]),
+    partial_update=extend_schema(tags=["Empaques de Producto"]),
+    destroy=extend_schema(tags=["Empaques de Producto"]),
+)
 class ProductPackagingViewSet(viewsets.ModelViewSet):
     """ViewSet para empaques de producto."""
     
@@ -182,6 +217,14 @@ class ProductPackagingViewSet(viewsets.ModelViewSet):
         return ProductPackaging.objects.none()
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Códigos de Producto"]),
+    create=extend_schema(tags=["Códigos de Producto"]),
+    retrieve=extend_schema(tags=["Códigos de Producto"]),
+    update=extend_schema(tags=["Códigos de Producto"]),
+    partial_update=extend_schema(tags=["Códigos de Producto"]),
+    destroy=extend_schema(tags=["Códigos de Producto"]),
+)
 class ProductCodeViewSet(viewsets.ModelViewSet):
     """ViewSet para códigos de producto (QR, EAN13, etc)."""
     

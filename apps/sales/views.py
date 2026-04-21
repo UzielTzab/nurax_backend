@@ -6,11 +6,21 @@ from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from drf_spectacular.utils import extend_schema_view, extend_schema
 from django.db import transaction
 from .models import Sale, SaleItem, SalePayment
 from .serializers import SaleSerializer, SaleItemSerializer, SalePaymentSerializer, SaleCreateSerializer
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Ventas"]),
+    create=extend_schema(tags=["Ventas"]),
+    retrieve=extend_schema(tags=["Ventas"]),
+    update=extend_schema(tags=["Ventas"]),
+    partial_update=extend_schema(tags=["Ventas"]),
+    destroy=extend_schema(tags=["Ventas"]),
+    pending_payments=extend_schema(tags=["Ventas"]),
+)
 class SaleViewSet(viewsets.ModelViewSet):
     """ViewSet para ventas."""
     
@@ -48,6 +58,14 @@ class SaleViewSet(viewsets.ModelViewSet):
         serializer.save()
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Items de Venta"]),
+    create=extend_schema(tags=["Items de Venta"]),
+    retrieve=extend_schema(tags=["Items de Venta"]),
+    update=extend_schema(tags=["Items de Venta"]),
+    partial_update=extend_schema(tags=["Items de Venta"]),
+    destroy=extend_schema(tags=["Items de Venta"]),
+)
 class SaleItemViewSet(viewsets.ModelViewSet):
     """ViewSet para items de venta."""
     
@@ -64,6 +82,14 @@ class SaleItemViewSet(viewsets.ModelViewSet):
         return SaleItem.objects.filter(sale__store_id__in=stores)
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Pagos"]),
+    create=extend_schema(tags=["Pagos"]),
+    retrieve=extend_schema(tags=["Pagos"]),
+    update=extend_schema(tags=["Pagos"]),
+    partial_update=extend_schema(tags=["Pagos"]),
+    destroy=extend_schema(tags=["Pagos"]),
+)
 class SalePaymentViewSet(viewsets.ModelViewSet):
     """ViewSet para pagos de venta."""
     

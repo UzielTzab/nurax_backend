@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from drf_spectacular.utils import extend_schema_view, extend_schema
 from django.db import transaction
 from .models import (
     Expense, CashShift, CashMovement, ExpenseCategory,
@@ -18,6 +19,17 @@ from .serializers import (
 )
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Turnos de Caja"]),
+    create=extend_schema(tags=["Turnos de Caja"]),
+    retrieve=extend_schema(tags=["Turnos de Caja"]),
+    update=extend_schema(tags=["Turnos de Caja"]),
+    partial_update=extend_schema(tags=["Turnos de Caja"]),
+    destroy=extend_schema(tags=["Turnos de Caja"]),
+    open=extend_schema(tags=["Turnos de Caja"]),
+    current_open=extend_schema(tags=["Turnos de Caja"]),
+    close=extend_schema(tags=["Turnos de Caja"]),
+)
 class CashShiftViewSet(viewsets.ModelViewSet):
     """ViewSet para turnos de caja."""
     
@@ -127,6 +139,14 @@ class CashShiftViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Movimientos de Caja"]),
+    create=extend_schema(tags=["Movimientos de Caja"]),
+    retrieve=extend_schema(tags=["Movimientos de Caja"]),
+    update=extend_schema(tags=["Movimientos de Caja"]),
+    partial_update=extend_schema(tags=["Movimientos de Caja"]),
+    destroy=extend_schema(tags=["Movimientos de Caja"]),
+)
 class CashMovementViewSet(viewsets.ModelViewSet):
     """ViewSet para movimientos de caja."""
     
@@ -146,6 +166,14 @@ class CashMovementViewSet(viewsets.ModelViewSet):
         return CashMovement.objects.filter(cash_shift__store_id__in=stores)
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Categorías de Gasto"]),
+    create=extend_schema(tags=["Categorías de Gasto"]),
+    retrieve=extend_schema(tags=["Categorías de Gasto"]),
+    update=extend_schema(tags=["Categorías de Gasto"]),
+    partial_update=extend_schema(tags=["Categorías de Gasto"]),
+    destroy=extend_schema(tags=["Categorías de Gasto"]),
+)
 class ExpenseCategoryViewSet(viewsets.ModelViewSet):
     """ViewSet para categorías de gasto."""
     
@@ -162,6 +190,14 @@ class ExpenseCategoryViewSet(viewsets.ModelViewSet):
         return ExpenseCategory.objects.filter(store_id__in=stores)
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Gastos"]),
+    create=extend_schema(tags=["Gastos"]),
+    retrieve=extend_schema(tags=["Gastos"]),
+    update=extend_schema(tags=["Gastos"]),
+    partial_update=extend_schema(tags=["Gastos"]),
+    destroy=extend_schema(tags=["Gastos"]),
+)
 class ExpenseViewSet(viewsets.ModelViewSet):
     """ViewSet para gastos operativos."""
     
@@ -181,6 +217,15 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         return Expense.objects.filter(store_id__in=stores)
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Órdenes de Compra"]),
+    create=extend_schema(tags=["Órdenes de Compra"]),
+    retrieve=extend_schema(tags=["Órdenes de Compra"]),
+    update=extend_schema(tags=["Órdenes de Compra"]),
+    partial_update=extend_schema(tags=["Órdenes de Compra"]),
+    destroy=extend_schema(tags=["Órdenes de Compra"]),
+    mark_received=extend_schema(tags=["Órdenes de Compra"]),
+)
 class PurchaseOrderViewSet(viewsets.ModelViewSet):
     """ViewSet para órdenes de compra."""
     

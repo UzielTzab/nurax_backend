@@ -12,8 +12,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
+from drf_spectacular.utils import extend_schema
 
 
+@extend_schema(tags=["Autenticación"])
 class CustomTokenObtainPairView(TokenObtainPairView):
     """
     Custom login endpoint that returns JWT tokens in HttpOnly cookies.
@@ -59,6 +61,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
         return response
 
 
+@extend_schema(tags=["Autenticación"])
 class CustomTokenRefreshView(TokenRefreshView):
     """
     Custom refresh endpoint that reads and sets tokens in HttpOnly cookies.
@@ -105,6 +108,7 @@ class CustomTokenRefreshView(TokenRefreshView):
         return response
 
 
+@extend_schema(tags=["Autenticación"])
 class LogoutView(APIView):
     """
     Custom logout endpoint that deletes HttpOnly cookies.

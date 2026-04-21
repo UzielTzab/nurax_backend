@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema_view, extend_schema
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from .models import User, Store, StoreMembership, Client
@@ -20,6 +21,14 @@ from apps.products.models import Category, Supplier
 User = get_user_model()
 
 
+@extend_schema_view(
+    me=extend_schema(tags=["Usuarios"]),
+    change_password=extend_schema(tags=["Usuarios"]),
+    register=extend_schema(tags=["Usuarios"]),
+    software_clients=extend_schema(tags=["Usuarios"]),
+    toggle_software_client=extend_schema(tags=["Usuarios"]),
+    delete_software_client=extend_schema(tags=["Usuarios"]),
+)
 class UserViewSet(viewsets.GenericViewSet):
     """ViewSet para usuarios (lectura, actualización, registro y cambio de contraseña)."""
     
@@ -176,6 +185,16 @@ class UserViewSet(viewsets.GenericViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Tiendas"]),
+    create=extend_schema(tags=["Tiendas"]),
+    retrieve=extend_schema(tags=["Tiendas"]),
+    update=extend_schema(tags=["Tiendas"]),
+    partial_update=extend_schema(tags=["Tiendas"]),
+    destroy=extend_schema(tags=["Tiendas"]),
+    create_with_owner=extend_schema(tags=["Tiendas"]),
+    memberships=extend_schema(tags=["Tiendas"]),
+)
 class StoreViewSet(viewsets.ModelViewSet):
     """ViewSet para tiendas."""
     
@@ -239,6 +258,7 @@ class StoreViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+@extend_schema(tags=["Wizard de Configuración"])
 class OnboardingWizardView(APIView):
     """Wizard v2 - crea tienda + categorias + proveedor en un solo request."""
 
@@ -319,6 +339,14 @@ class OnboardingWizardView(APIView):
         return Response(response_payload, status=status.HTTP_200_OK)
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Membresías"]),
+    create=extend_schema(tags=["Membresías"]),
+    retrieve=extend_schema(tags=["Membresías"]),
+    update=extend_schema(tags=["Membresías"]),
+    partial_update=extend_schema(tags=["Membresías"]),
+    destroy=extend_schema(tags=["Membresías"]),
+)
 class StoreMembershipViewSet(viewsets.ModelViewSet):
     """ViewSet para membresías de tienda."""
     
@@ -355,6 +383,14 @@ class StoreMembershipViewSet(viewsets.ModelViewSet):
         serializer.save()
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Clientes"]),
+    create=extend_schema(tags=["Clientes"]),
+    retrieve=extend_schema(tags=["Clientes"]),
+    update=extend_schema(tags=["Clientes"]),
+    partial_update=extend_schema(tags=["Clientes"]),
+    destroy=extend_schema(tags=["Clientes"]),
+)
 class ClientViewSet(viewsets.ModelViewSet):
     """ViewSet para clientes."""
     

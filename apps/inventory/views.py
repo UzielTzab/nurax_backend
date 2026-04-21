@@ -4,11 +4,16 @@ ARCHITECTURE_V2: Movimientos de inventario (Kárdex).
 """
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
+from drf_spectacular.utils import extend_schema_view, extend_schema
 from django.db import transaction
 from .models import InventoryMovement
 from .serializers import InventoryMovementSerializer
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Inventario"]),
+    retrieve=extend_schema(tags=["Inventario"]),
+)
 class InventoryMovementViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet para movimientos de inventario (Kárdex) - Solo lectura."""
     

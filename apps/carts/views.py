@@ -5,11 +5,23 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from drf_spectacular.utils import extend_schema_view, extend_schema
 from django.shortcuts import get_object_or_404
 from .models import ActiveCart, CartItem
 from .serializers import ActiveCartSerializer, CartItemSerializer, CartItemCreateSerializer
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Carritos"]),
+    create=extend_schema(tags=["Carritos"]),
+    retrieve=extend_schema(tags=["Carritos"]),
+    update=extend_schema(tags=["Carritos"]),
+    partial_update=extend_schema(tags=["Carritos"]),
+    destroy=extend_schema(tags=["Carritos"]),
+    add_item=extend_schema(tags=["Carritos"]),
+    remove_item=extend_schema(tags=["Carritos"]),
+    clear=extend_schema(tags=["Carritos"]),
+)
 class ActiveCartViewSet(viewsets.ModelViewSet):
     """ViewSet para carritos activos."""
     

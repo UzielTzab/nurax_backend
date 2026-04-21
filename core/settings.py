@@ -201,9 +201,12 @@ AUTH_USER_MODEL = 'accounts.User'
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Nurax API',
-    'DESCRIPTION': 'Documentación de la API de Nurax',
+    'DESCRIPTION': 'Documentación de la API de Nurax - Sistema de Gestión de Tiendas',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'SCHEMA_PATH_PREFIX': '/api/v1/',
+    'ENUM_ADD_EXPLICIT_BLANK_NULLS': False,
+    'COERCE_DECIMAL_TO_STRING': False,
 }
 
 # Pusher

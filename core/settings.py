@@ -207,6 +207,14 @@ SPECTACULAR_SETTINGS = {
     'SCHEMA_PATH_PREFIX': '/api/v1/',
     'ENUM_ADD_EXPLICIT_BLANK_NULLS': False,
     'COERCE_DECIMAL_TO_STRING': False,
+    # Swagger UI Customization - Mejora de experiencia de búsqueda
+    'SWAGGER_UI_SETTINGS': {
+        'persistAuthorization': True,  # Mantener autenticación en refresh
+        'displayOperationId': False,   # No mostrar operation IDs
+        'filter': True,                # Habilitar filtro/buscador en los endpoints
+        'showExtensions': False,       # Ocultar extensiones OpenAPI
+        'deepLinking': True,           # Permitir deep linking a endpoints específicos
+    },
 }
 
 # Pusher

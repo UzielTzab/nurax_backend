@@ -130,6 +130,17 @@ Bienvenido a la documentación del backend de Nurax. Este directorio contiene to
    - **Duración lectura:** 3-5 minutos
    - **Para quién:** API consumers, Frontend developers, Testing
 
+### 14. **[SWAGGER_SEARCH_GUIDE.md](SWAGGER_SEARCH_GUIDE.md)** - Guía del Buscador en Swagger
+   - 🔍 Cómo usar el buscador de endpoints
+   - Ubicación exacta del buscador en Swagger UI
+   - Ejemplos de búsquedas (por nombre, método, ruta)
+   - Tips profesionales para búsquedas eficientes
+   - Troubleshooting si no ves el buscador
+   - Configuración técnica de drf-spectacular
+   - Atajos de teclado
+   - **Duración lectura:** 5-10 minutos
+   - **Para quién:** API consumers, Frontend developers, QA, Testers
+
 ---
 
 ## 🎯 Guía Rápida por Rol
@@ -360,6 +371,12 @@ http://localhost:8000/api/docs/
 
 ### **"¿Cómo me autentico?"**
 → Ve a [API_ENDPOINTS.md](API_ENDPOINTS.md) - Sección "Autenticación"
+
+### **"¿Cómo busco endpoints rápidamente en Swagger?"**
+→ Ve a [SWAGGER_SEARCH_GUIDE.md](SWAGGER_SEARCH_GUIDE.md) - Guía completa del buscador
+→ **Ubicación:** Caja de búsqueda en la parte superior de `http://localhost:8000/api/docs/`
+→ **Ejemplos:** Busca "usuarios", "get", "/v1/sales", etc.
+
 ### **"¿Cómo está asegurada la autenticación?"**
 → Ve a [BACKEND_IMPLEMENT_HTTPONLY_COOKIES.md](BACKEND_IMPLEMENT_HTTPONLY_COOKIES.md) - Implementación de HttpOnly cookies
 ### **"¿Cómo hago una migración?"**

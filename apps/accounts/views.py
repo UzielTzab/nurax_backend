@@ -49,7 +49,7 @@ class UserViewSet(viewsets.GenericViewSet):
         serializer = UserSerializer(user)
         return Response(serializer.data)
     
-    @action(detail=False, methods=['PATCH'])
+    @action(detail=False, methods=['PATCH'], url_path='change-password', url_name='change-password')
     def change_password(self, request):
         """Cambia la contraseña del usuario actual."""
         user = request.user
@@ -219,7 +219,7 @@ class StoreViewSet(viewsets.ModelViewSet):
             return StoreWithOwnerSerializer
         return self.serializer_class
     
-    @action(detail=False, methods=['POST'], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['POST'], permission_classes=[IsAuthenticated], url_path='create-with-owner', url_name='create-with-owner')
     def create_with_owner(self, request):
         """Crear una tienda con su propietario en una transacción atómica.
         

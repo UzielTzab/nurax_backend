@@ -21,6 +21,5 @@ urlpatterns = [
     path('users/software-clients/<uuid:user_id>/toggle-active/', UserViewSet.as_view({'patch': 'toggle_software_client'}), name='software-clients-toggle'),
     path('users/software-clients/<uuid:user_id>/', UserViewSet.as_view({'delete': 'delete_software_client'}), name='software-clients-delete'),
     path('users/change-password/', UserViewSet.as_view({'patch': 'change_password'}), name='user-change-password'),
-    path('stores/create-with-owner/', StoreViewSet.as_view({'post': 'create_with_owner'}), name='store-create-with-owner'),
     path('', include(router.urls)),
 ]

@@ -188,7 +188,12 @@ class ProductViewSet(viewsets.ModelViewSet):
         serializer.save()
 
     def create(self, request, *args, **kwargs):
-        normalized = self._normalize_payload(request.data)
+        # Combinar request.data (texto) + request.FILES (archivos) en un QueryDict mutable
+        # para que el serializer reciba image_file directamente.
+        data = request.data.copy()
+        if 'image_file' in request.FILES:
+            data['image_file'] = request.FILES['image_file']
+        normalized = self._normalize_payload(data)
         serializer = self.get_serializer(data=normalized)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -198,12 +203,32 @@ class ProductViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
-        normalized = self._normalize_payload(request.data)
+        data = request.data.copy()
+        if 'image_file' in request.FILES:
+            data['image_file'] = request.FILES['image_file']
+        normalized = self._normalize_payload(data)
         serializer = self.get_serializer(instance, data=normalized, partial=partial)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
         return Response(serializer.data)
     
+    @action(detail=False, methods=['post'])
+    def bulk_delete(self, request):
+        """Elimina múltiples productos por sus IDs."""
+        ids = request.data.get('ids', [])
+        if not ids or not isinstance(ids, list):
+            return Response(
+                {'error': 'Se requiere una lista de IDs válida.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        qs = self.get_queryset().filter(id__in=ids)
+        deleted_count, _ = qs.delete()
+        return Response(
+            {'deleted': deleted_count},
+            status=status.HTTP_200_OK
+        )
+
     @action(detail=False, methods=['get'])
     def low_stock(self, request):
         """Productos con stock bajo (< 10 unidades)."""

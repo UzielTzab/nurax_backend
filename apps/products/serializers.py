@@ -62,15 +62,21 @@ class ProductSerializer(serializers.ModelSerializer):
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
     packagings = ProductPackagingSerializer(many=True, read_only=True)
     codes = ProductCodeSerializer(many=True, read_only=True)
+
+    # Mismo patrón que avatar en el perfil de usuario:
+    # - image_file: recibe el archivo (write_only, nunca se devuelve)
+    # - image_url:  devuelve la URL pública de Cloudinary (read_only)
+    image_file = serializers.ImageField(write_only=True, required=False, allow_null=True)
     
     class Meta:
         model = Product
         fields = [
             'id', 'store', 'name', 'base_cost', 'sale_price', 'current_stock',
             'category', 'category_name', 'supplier', 'supplier_name',
+            'image_url', 'image_file',
             'packagings', 'codes', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'image_url', 'created_at', 'updated_at']
         extra_kwargs = {
             'store': {'required': False},
             'category': {'required': False, 'allow_null': True},
@@ -80,27 +86,47 @@ class ProductSerializer(serializers.ModelSerializer):
             'current_stock': {'required': False},
         }
 
+    def _upload_to_cloudinary(self, image_file):
+        """Sube el archivo a Cloudinary y retorna la URL segura."""
+        import cloudinary.uploader
+        try:
+            result = cloudinary.uploader.upload(
+                image_file,
+                folder='products',
+                transformation=[{'width': 800, 'height': 800, 'crop': 'limit'}]
+            )
+            return result.get('secure_url')
+        except Exception as exc:
+            raise serializers.ValidationError({'image_file': f'Error al subir imagen: {exc}'})
+
     def create(self, validated_data):
-        """Permite creación rápida con defaults cuando faltan campos financieros."""
+        """Crea el producto. Si viene image_file, lo sube a Cloudinary."""
+        image_file = validated_data.pop('image_file', None)
         validated_data.setdefault('base_cost', Decimal('0.00'))
         validated_data.setdefault('sale_price', Decimal('0.01'))
         validated_data.setdefault('current_stock', 0)
+        if image_file:
+            validated_data['image_url'] = self._upload_to_cloudinary(image_file)
         return super().create(validated_data)
-    
+
+    def update(self, instance, validated_data):
+        """Actualiza el producto. Si viene imagen nueva, sube y reemplaza URL."""
+        image_file = validated_data.pop('image_file', None)
+        if image_file:
+            validated_data['image_url'] = self._upload_to_cloudinary(image_file)
+        return super().update(instance, validated_data)
+
     def validate_base_cost(self, value):
-        """Validar que el costo base sea no negativo."""
         if value < 0:
             raise serializers.ValidationError("Costo base no puede ser negativo")
         return value
-    
+
     def validate_sale_price(self, value):
-        """Validar que el precio de venta sea positivo."""
         if value <= 0:
             raise serializers.ValidationError("Precio de venta debe ser mayor a 0")
         return value
-    
+
     def validate(self, data):
-        """Validación adicional entre campos."""
         base_cost = data.get('base_cost')
         sale_price = data.get('sale_price')
         if base_cost is not None and sale_price is not None:

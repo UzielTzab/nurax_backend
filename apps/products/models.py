@@ -127,6 +127,12 @@ class Product(models.Model):
         default=0,
         help_text="Stock disponible actual"
     )
+    image_url = models.URLField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="URL de la imagen del producto en Cloudinary"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

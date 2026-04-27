@@ -3,6 +3,7 @@ Vistas para la app Products.
 ARCHITECTURE_V2: Catálogo, categorías, proveedores y códigos.
 """
 import uuid
+from django.db import transaction as db_transaction
 from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
@@ -26,18 +27,18 @@ from .serializers import (
 )
 class CategoryViewSet(viewsets.ModelViewSet):
     """ViewSet para categorías de una tienda."""
-    
+
     permission_classes = [IsAuthenticated]
     serializer_class = CategorySerializer
     queryset = Category.objects.all()
-    
+
     def get_queryset(self):
         """Obtener categorías de la tienda especificada."""
         store_id = self.request.query_params.get('store_id')
         if store_id:
             return Category.objects.filter(store_id=store_id)
         return Category.objects.none()
-    
+
     def perform_create(self, serializer):
         """Asignar tienda al crear categoría."""
         store_id = self.request.data.get('store')
@@ -55,38 +56,38 @@ class CategoryViewSet(viewsets.ModelViewSet):
 )
 class SupplierViewSet(viewsets.ModelViewSet):
     """ViewSet para proveedores de una tienda."""
-    
+
     permission_classes = [IsAuthenticated]
     serializer_class = SupplierSerializer
     queryset = Supplier.objects.all()
-    
+
     def get_queryset(self):
         """Obtener proveedores de la tienda especificada."""
         store_id = self.request.query_params.get('store_id')
         if store_id:
             return Supplier.objects.filter(store_id=store_id)
         return Supplier.objects.none()
-    
+
     def create(self, request, *args, **kwargs):
         """Crear proveedor asignando automáticamente la tienda del usuario."""
         from apps.accounts.models import StoreMembership
-        
+
         payload = request.data.copy()
         store_id = payload.get('store')
-        
+
         # Si no se envía store, inferir la tienda por membresía del usuario
         if not store_id:
             membership = StoreMembership.objects.filter(user=request.user).select_related('store').first()
             if membership:
                 store_id = str(membership.store_id)
                 payload['store'] = store_id
-        
+
         if not store_id:
             return Response(
                 {'error': 'No se encontró una tienda asociada al usuario'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         serializer = self.get_serializer(data=payload)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -103,10 +104,11 @@ class SupplierViewSet(viewsets.ModelViewSet):
     destroy=extend_schema(tags=["Productos"]),
     low_stock=extend_schema(tags=["Productos"]),
     out_of_stock=extend_schema(tags=["Productos"]),
+    movements=extend_schema(tags=["Productos"]),
 )
 class ProductViewSet(viewsets.ModelViewSet):
     """ViewSet para gestión de productos."""
-    
+
     permission_classes = [IsAuthenticated]
     serializer_class = ProductSerializer
     queryset = Product.objects.all()
@@ -148,7 +150,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         # Limpiar campo legacy si vino junto al payload.
         payload.pop('stock', None)
         return payload
-    
+
     def get_queryset(self):
         """Filtrar productos por membresías del usuario (y opcionalmente por store_id)."""
         from apps.accounts.models import StoreMembership
@@ -161,10 +163,14 @@ class ProductViewSet(viewsets.ModelViewSet):
             is_admin = getattr(self.request.user, 'role', None) == 'admin'
             if not is_admin and not is_member:
                 return Product.objects.none()
-            return Product.objects.filter(store_id=requested_store_id)
+            return Product.objects.filter(store_id=requested_store_id).select_related(
+                'category', 'supplier'
+            ).prefetch_related('packagings', 'codes')
 
         store_ids = memberships.values_list('store_id', flat=True)
-        return Product.objects.filter(store_id__in=store_ids)
+        return Product.objects.filter(store_id__in=store_ids).select_related(
+            'category', 'supplier'
+        ).prefetch_related('packagings', 'codes')
 
     def perform_create(self, serializer):
         """Asignar tienda automáticamente y validar acceso del usuario."""
@@ -201,17 +207,53 @@ class ProductViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def update(self, request, *args, **kwargs):
+        """
+        Actualiza el producto. Si current_stock cambió, registra un INVENTORY_MOVEMENT
+        de tipo ADJUSTMENT dentro de la misma transacción de base de datos.
+
+        Regla crítica: el UPDATE en PRODUCTO y el INSERT en INVENTORY_MOVEMENT ocurren
+        juntos o ninguno (transacción atómica).
+        """
+        from apps.inventory.models import InventoryMovement
+
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
         data = request.data.copy()
+
         if 'image_file' in request.FILES:
             data['image_file'] = request.FILES['image_file']
         normalized = self._normalize_payload(data)
-        serializer = self.get_serializer(instance, data=normalized, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
+
+        # Capturar stock previo ANTES de guardar
+        stock_before = instance.current_stock
+        new_stock_raw = normalized.get('current_stock')
+
+        with db_transaction.atomic():
+            serializer = self.get_serializer(instance, data=normalized, partial=partial)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            updated_instance = serializer.instance
+
+            # Si el payload incluía current_stock y cambió → crear ADJUSTMENT
+            if new_stock_raw is not None:
+                try:
+                    stock_after = int(new_stock_raw)
+                except (TypeError, ValueError):
+                    stock_after = stock_before
+
+                if stock_after != stock_before:
+                    delta = stock_after - stock_before
+                    InventoryMovement.objects.create(
+                        product=updated_instance,
+                        user=request.user,
+                        movement_type=InventoryMovement.MovementType.ADJUSTMENT,
+                        quantity=delta,
+                        stock_before=stock_before,
+                        stock_after=stock_after,
+                    )
+
         return Response(serializer.data)
-    
+
     @action(detail=False, methods=['post'])
     def bulk_delete(self, request):
         """Elimina múltiples productos por sus IDs."""
@@ -236,12 +278,28 @@ class ProductViewSet(viewsets.ModelViewSet):
         products = self.get_queryset().filter(current_stock__lt=threshold)
         serializer = self.get_serializer(products, many=True)
         return Response(serializer.data)
-    
+
     @action(detail=False, methods=['get'])
     def out_of_stock(self, request):
         """Productos sin stock."""
         products = self.get_queryset().filter(current_stock=0)
         serializer = self.get_serializer(products, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'], url_path='movements')
+    def movements(self, request, pk=None):
+        """
+        Retorna los últimos 20 movimientos de inventario del producto.
+        GET /api/v1/products/products/{id}/movements/
+        """
+        from apps.inventory.models import InventoryMovement
+        from apps.inventory.serializers import InventoryMovementSerializer
+
+        product = self.get_object()
+        qs = InventoryMovement.objects.filter(
+            product=product
+        ).select_related('user').order_by('-created_at')[:20]
+        serializer = InventoryMovementSerializer(qs, many=True)
         return Response(serializer.data)
 
 
@@ -255,11 +313,11 @@ class ProductViewSet(viewsets.ModelViewSet):
 )
 class ProductPackagingViewSet(viewsets.ModelViewSet):
     """ViewSet para empaques de producto."""
-    
+
     permission_classes = [IsAuthenticated]
     serializer_class = ProductPackagingSerializer
     queryset = ProductPackaging.objects.all()
-    
+
     def get_queryset(self):
         """Obtener empaques de un producto específico."""
         product_id = self.request.query_params.get('product_id')
@@ -278,15 +336,14 @@ class ProductPackagingViewSet(viewsets.ModelViewSet):
 )
 class ProductCodeViewSet(viewsets.ModelViewSet):
     """ViewSet para códigos de producto (QR, EAN13, etc)."""
-    
+
     permission_classes = [IsAuthenticated]
     serializer_class = ProductCodeSerializer
     queryset = ProductCode.objects.all()
-    
+
     def get_queryset(self):
         """Obtener códigos de un producto específico."""
         product_id = self.request.query_params.get('product_id')
         if product_id:
             return ProductCode.objects.filter(product_id=product_id)
         return ProductCode.objects.none()
-

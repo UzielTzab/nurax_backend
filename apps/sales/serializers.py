@@ -58,12 +58,48 @@ class SaleSerializer(serializers.ModelSerializer):
         return str(obj.balance_due)
 
 
+
+class SaleCreateItemSerializer(serializers.Serializer):
+    product = serializers.IntegerField(allow_null=True, required=False)
+    quantity = serializers.IntegerField()
+    unit_price = serializers.DecimalField(max_digits=10, decimal_places=2)
+
 class SaleCreateSerializer(serializers.ModelSerializer):
     """Serializer para crear ventas."""
+    
+    items = SaleCreateItemSerializer(many=True, write_only=True, required=False)
+    id = serializers.UUIDField(read_only=True)
     
     class Meta:
         model = Sale
         fields = [
-            'store', 'cash_shift', 'customer', 'status',
-            'total_amount', 'amount_paid'
+            'id', 'store', 'cash_shift', 'customer', 'status',
+            'total_amount', 'amount_paid', 'items'
         ]
+
+    def create(self, validated_data):
+        items_data = validated_data.pop('items', [])
+        sale = super().create(validated_data)
+        
+        from apps.products.models import Product
+        
+        for item_data in items_data:
+            # Si el frontend envía 'product' nulo, se puede omitir o manejar. 
+            product_id = item_data.get('product')
+            unit_cost = 0
+            if product_id:
+                try:
+                    product = Product.objects.get(id=product_id)
+                    unit_cost = product.base_cost or 0
+                except Product.DoesNotExist:
+                    pass
+                    
+            SaleItem.objects.create(
+                sale=sale,
+                product_id=product_id,
+                quantity=item_data.get('quantity'),
+                unit_price=item_data.get('unit_price'),
+                unit_cost=unit_cost
+            )
+            
+        return sale

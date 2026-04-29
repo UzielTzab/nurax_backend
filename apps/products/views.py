@@ -33,11 +33,22 @@ class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
 
     def get_queryset(self):
-        """Obtener categorías de la tienda especificada."""
+        """Obtener categorías filtradas por tienda.
+        
+        Si viene store_id como query param, filtra por esa tienda.
+        Si no viene, filtra por todas las tiendas del usuario autenticado.
+        """
+        from apps.accounts.models import StoreMembership
+
         store_id = self.request.query_params.get('store_id')
         if store_id:
             return Category.objects.filter(store_id=store_id)
-        return Category.objects.none()
+
+        # Fallback: todas las tiendas del usuario
+        store_ids = StoreMembership.objects.filter(
+            user=self.request.user
+        ).values_list('store_id', flat=True)
+        return Category.objects.filter(store_id__in=store_ids)
 
     def perform_create(self, serializer):
         """Asignar tienda al crear categoría."""
@@ -62,11 +73,23 @@ class SupplierViewSet(viewsets.ModelViewSet):
     queryset = Supplier.objects.all()
 
     def get_queryset(self):
-        """Obtener proveedores de la tienda especificada."""
+        """Obtener proveedores filtrados por tienda.
+
+        Si viene store_id como query param, filtra por esa tienda.
+        Si no viene, filtra por todas las tiendas del usuario autenticado.
+        Este comportamiento es simétrico al de ProductViewSet.
+        """
+        from apps.accounts.models import StoreMembership
+
         store_id = self.request.query_params.get('store_id')
         if store_id:
             return Supplier.objects.filter(store_id=store_id)
-        return Supplier.objects.none()
+
+        # Fallback: todas las tiendas donde el usuario tiene membresía
+        store_ids = StoreMembership.objects.filter(
+            user=self.request.user
+        ).values_list('store_id', flat=True)
+        return Supplier.objects.filter(store_id__in=store_ids).order_by('-created_at')
 
     def create(self, request, *args, **kwargs):
         """Crear proveedor asignando automáticamente la tienda del usuario."""

@@ -276,6 +276,14 @@ class OnboardingWizardView(APIView):
             'ABARROTES': ['Bebidas', 'Snacks', 'Abarrotes', 'Lacteos', 'Limpieza', 'Higiene'],
             'FARMACIA': ['Medicamentos', 'Cuidado personal', 'Suplementos', 'Higiene', 'Bebe', 'Primeros auxilios'],
             'FERRETERIA': ['Herramientas', 'Tornilleria', 'Electricidad', 'Pintura', 'Plomeria', 'Seguridad'],
+            'MASCOTAS': [
+                'Alimento Seco (Croquetas)',
+                'Alimento Húmedo (Sobres, latas, patés)',
+                'Premios y Snacks (Huesos, galletas)',
+                'Higiene y Cuidado (Shampoo, arena, cepillos)',
+                'Accesorios y Juguetes (Correas, collares, pelotas)',
+                'Farmacia Veterinaria (Desparasitantes, vitaminas - solo si venden medicina)',
+            ],
         }
 
         with transaction.atomic():

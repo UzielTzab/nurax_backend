@@ -136,7 +136,8 @@ class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
     queryset = Product.objects.all()
     filterset_fields = ['store', 'category', 'supplier']
-    search_fields = ['name']
+    # Permitimos buscar por nombre y por códigos asociados (ean13, upc, etc.)
+    search_fields = ['name', 'codes__code']
     ordering_fields = ['name', 'created_at', 'current_stock', 'sale_price']
     ordering = ['-created_at']
 

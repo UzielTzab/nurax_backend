@@ -284,6 +284,14 @@ class OnboardingWizardView(APIView):
                 'Accesorios y Juguetes (Correas, collares, pelotas)',
                 'Farmacia Veterinaria (Desparasitantes, vitaminas - solo si venden medicina)',
             ],
+            'BELLEZA': [
+                'Servicios de Cabello (Cortes, tintes, peinados)',
+                'Servicios de Uñas (Manicure, pedicure, acrílico)',
+                'Cuidado Capilar (Shampoos, tratamientos, ceras)',
+                'Cosméticos y Maquillaje',
+                'Herramientas y Accesorios (Cepillos, pasadores)',
+                'Cuidado de la Piel / Spa (Mascarillas, masajes)',
+            ],
         }
 
         with transaction.atomic():

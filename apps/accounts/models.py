@@ -55,6 +55,7 @@ class Store(models.Model):
         FARMACIA = 'FARMACIA', 'Farmacia'
         FERRETERIA = 'FERRETERIA', 'Ferretería'
         MASCOTAS = 'MASCOTAS', 'Mascotas y Veterinaria'
+        BELLEZA = 'BELLEZA', 'Belleza y Estética'
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=200, help_text="Nombre de la tienda (Ej: Electrónica Nurax)")

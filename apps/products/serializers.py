@@ -67,13 +67,14 @@ class ProductSerializer(serializers.ModelSerializer):
     # - image_file: recibe el archivo (write_only, nunca se devuelve)
     # - image_url:  devuelve la URL pública de Cloudinary (read_only)
     image_file = serializers.ImageField(write_only=True, required=False, allow_null=True)
+    remove_image = serializers.BooleanField(write_only=True, required=False, default=False)
     
     class Meta:
         model = Product
         fields = [
             'id', 'store', 'name', 'base_cost', 'sale_price', 'current_stock',
             'category', 'category_name', 'supplier', 'supplier_name',
-            'image_url', 'image_file',
+            'image_url', 'image_file', 'remove_image',
             'packagings', 'codes', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'image_url', 'created_at', 'updated_at']
@@ -102,6 +103,7 @@ class ProductSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         """Crea el producto. Si viene image_file, lo sube a Cloudinary."""
         image_file = validated_data.pop('image_file', None)
+        validated_data.pop('remove_image', None)
         validated_data.setdefault('base_cost', Decimal('0.00'))
         validated_data.setdefault('sale_price', Decimal('0.01'))
         validated_data.setdefault('current_stock', 0)
@@ -110,10 +112,16 @@ class ProductSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        """Actualiza el producto. Si viene imagen nueva, sube y reemplaza URL."""
+        """Actualiza el producto y soporta quitar imagen sin subir una nueva."""
         image_file = validated_data.pop('image_file', None)
+        remove_image = validated_data.pop('remove_image', False)
+
+        if remove_image and not image_file:
+            validated_data['image_url'] = None
+
         if image_file:
             validated_data['image_url'] = self._upload_to_cloudinary(image_file)
+
         return super().update(instance, validated_data)
 
     def validate_base_cost(self, value):

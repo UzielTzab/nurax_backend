@@ -1,6 +1,8 @@
-from pathlib import Path
 from datetime import timedelta
 import os
+from pathlib import Path
+
+import cloudinary
 import dj_database_url
 from dotenv import load_dotenv
 
@@ -17,9 +19,11 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
 
+
 def _split_csv_env(name: str, default: str = ''):
     raw = os.getenv(name, default)
     return [item.strip() for item in raw.split(',') if item.strip()]
+
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -46,7 +50,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # ← Primero
+    'corsheaders.middleware.CorsMiddleware',  # CORS must be first
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -76,34 +80,35 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
-if os.getenv('DATABASE_URL'):
-    DATABASES = {
-        'default': dj_database_url.config(default=os.getenv('DATABASE_URL'))
-    }
-elif os.getenv('DB_HOST'):
-    DATABASES = {
-        'default': {
+
+def _database_config():
+    database_url = os.getenv('DATABASE_URL')
+    if database_url:
+        return dj_database_url.config(default=database_url)
+
+    db_host = os.getenv('DB_HOST')
+    if db_host:
+        return {
             'ENGINE': 'django.db.backends.postgresql',
             'NAME': os.getenv('DB_NAME'),
             'USER': os.getenv('DB_USER'),
             'PASSWORD': os.getenv('DB_PASSWORD'),
-            'HOST': os.getenv('DB_HOST'),
+            'HOST': db_host,
             'PORT': os.getenv('DB_PORT', '5432'),
             'OPTIONS': {
                 'sslmode': os.getenv('DB_SSLMODE', 'require'),
             },
         }
-    }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
+
+    return {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 
-# Added for default behavior when DB varies, e.g., dev vs prod. If not running neon, maybe want local sqlite? 
-# The user specified neon, so we keep neon.
+
+DATABASES = {
+    'default': _database_config(),
+}
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -120,6 +125,9 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# AUTH USER MODEL
+AUTH_USER_MODEL = 'accounts.User'
+
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
@@ -130,7 +138,7 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'utils.authentication.CookieJWTAuthentication',  # 🔒 HttpOnly Cookies
+        'utils.authentication.CookieJWTAuthentication',  # HttpOnly cookies
         'rest_framework_simplejwt.authentication.JWTAuthentication',  # Fallback para API clients con header
     ),
     'DEFAULT_PERMISSION_CLASSES': (
@@ -162,11 +170,10 @@ CORS_ALLOWED_ORIGIN_REGEXES = _split_csv_env(
     r"^https://.*\.netlify\.app$"
 )
 
-# ✅ CORS Credentials - Permitir envío de cookies
+# CORS credentials - permitir envio de cookies
 CORS_ALLOW_CREDENTIALS = True
 
-# 🔒 HttpOnly Cookies Configuration (OWASP Best Practice)
-# Nota: En producción (Netlify -> Render) se requiere SameSite=None para cookies cross-site.
+# HttpOnly cookies (OWASP best practice)
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = os.getenv('SESSION_COOKIE_SAMESITE', 'Lax' if DEBUG else 'None')
 SESSION_COOKIE_SECURE = not DEBUG
@@ -184,21 +191,17 @@ CSRF_TRUSTED_ORIGINS = _split_csv_env(
 
 CLOUDINARY_STORAGE = {
     'CLOUD_NAME': os.getenv('CLOUDINARY_CLOUD_NAME'),
-    'API_KEY':    os.getenv('CLOUDINARY_API_KEY'),
+    'API_KEY': os.getenv('CLOUDINARY_API_KEY'),
     'API_SECRET': os.getenv('CLOUDINARY_API_SECRET'),
 }
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
-import cloudinary
 cloudinary.config(
-  cloud_name = os.getenv('CLOUDINARY_CLOUD_NAME'),
-  api_key = os.getenv('CLOUDINARY_API_KEY'),
-  api_secret = os.getenv('CLOUDINARY_API_SECRET'),
-  secure = True
+    cloud_name=os.getenv('CLOUDINARY_CLOUD_NAME'),
+    api_key=os.getenv('CLOUDINARY_API_KEY'),
+    api_secret=os.getenv('CLOUDINARY_API_SECRET'),
+    secure=True,
 )
-
-# AUTH USER MODEL
-AUTH_USER_MODEL = 'accounts.User'
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Nurax API',

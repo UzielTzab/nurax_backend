@@ -128,9 +128,6 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'utils.authentication.CookieJWTAuthentication',  # 🔒 HttpOnly Cookies
@@ -159,10 +156,11 @@ CORS_ALLOWED_ORIGINS = _split_csv_env(
     'http://localhost:5173,https://nurax.netlify.app'
 )
 
-# Permitir previews de Netlify sin tener que actualizar settings en cada deploy.
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^https://.*\.netlify\.app$",
-]
+# Permitir previews sin tener que actualizar settings en cada deploy.
+CORS_ALLOWED_ORIGIN_REGEXES = _split_csv_env(
+    'CORS_ALLOWED_ORIGIN_REGEXES',
+    r"^https://.*\.netlify\.app$"
+)
 
 # ✅ CORS Credentials - Permitir envío de cookies
 CORS_ALLOW_CREDENTIALS = True

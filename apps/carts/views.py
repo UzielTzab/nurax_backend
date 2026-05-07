@@ -258,7 +258,7 @@ class ActiveCartViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Tienda no encontrada'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Buscar un ActiveCart existente para este usuario+tienda (compartido entre dispositivos)
-        cart_obj = ActiveCart.objects.filter(user=user, store=store).first()
+        cart_obj = ActiveCart.objects.filter(user=user, store=store, is_parked=False).first()
         if not cart_obj:
             cart_obj = ActiveCart.objects.create(session_id=device_id, user=user, store=store)
         else:

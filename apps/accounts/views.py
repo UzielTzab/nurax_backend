@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from drf_spectacular.utils import extend_schema_view, extend_schema
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -201,6 +202,7 @@ class StoreViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = StoreSerializer
     queryset = Store.objects.all()
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     
     def get_queryset(self):
         """Filtrar tiendas donde el usuario es miembro."""
@@ -210,6 +212,13 @@ class StoreViewSet(viewsets.ModelViewSet):
             user=user
         ).values_list('store_id', flat=True)
         return Store.objects.filter(id__in=store_ids)
+
+    def _is_owner(self, user, store):
+        return StoreMembership.objects.filter(
+            store=store,
+            user=user,
+            role=StoreMembership.Role.OWNER
+        ).exists()
     
     def get_serializer_class(self):
         """Usar serializer con membresías en el detalle."""
@@ -218,6 +227,18 @@ class StoreViewSet(viewsets.ModelViewSet):
         if self.action == 'create_with_owner':
             return StoreWithOwnerSerializer
         return self.serializer_class
+
+    def update(self, request, *args, **kwargs):
+        store = self.get_object()
+        if not self._is_owner(request.user, store):
+            return Response({'error': 'Solo propietarios pueden modificar la tienda'}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        store = self.get_object()
+        if not self._is_owner(request.user, store):
+            return Response({'error': 'Solo propietarios pueden modificar la tienda'}, status=status.HTTP_403_FORBIDDEN)
+        return super().partial_update(request, *args, **kwargs)
     
     @action(detail=False, methods=['POST'], permission_classes=[IsAuthenticated], url_path='create-with-owner', url_name='create-with-owner')
     def create_with_owner(self, request):

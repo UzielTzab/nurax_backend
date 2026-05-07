@@ -65,6 +65,34 @@ class Store(models.Model):
         default=Plan.BASICO
     )
     tax_id = models.CharField(max_length=50, blank=True, help_text="RIF/NIT")
+    currency_symbol = models.CharField(
+        max_length=10,
+        default='$ MXN',
+        help_text="Simbolo de moneda"
+    )
+    address = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text="Direccion de la tienda"
+    )
+    phone = models.CharField(
+        max_length=50,
+        blank=True,
+        default='',
+        help_text="Telefono de la tienda"
+    )
+    country_code = models.CharField(
+        max_length=10,
+        blank=True,
+        default='+52',
+        help_text="Codigo de pais"
+    )
+    ticket_message = models.TextField(
+        blank=True,
+        default='Gracias por su preferencia!'
+    )
+    logo_url = models.URLField(blank=True, null=True)
     niche = models.CharField(
         max_length=20,
         choices=Niche.choices,

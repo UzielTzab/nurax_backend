@@ -74,6 +74,12 @@ class UserSerializer(serializers.ModelSerializer):
             'niche': store.niche,
             'is_first_setup_completed': store.is_first_setup_completed,
             'default_cash': str(store.default_cash),
+            'currency_symbol': store.currency_symbol,
+            'address': store.address,
+            'phone': store.phone,
+            'country_code': store.country_code,
+            'ticket_message': store.ticket_message,
+            'logo_url': store.logo_url,
         }
 
     def update(self, instance, validated_data):
@@ -127,6 +133,8 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
 class StoreSerializer(serializers.ModelSerializer):
     """Serializer para tiendas."""
+
+    logo_file = serializers.ImageField(write_only=True, required=False)
     
     class Meta:
         model = Store
@@ -136,6 +144,13 @@ class StoreSerializer(serializers.ModelSerializer):
             'plan',
             'tax_id',
             'niche',
+            'currency_symbol',
+            'address',
+            'phone',
+            'country_code',
+            'ticket_message',
+            'logo_url',
+            'logo_file',
             'active',
             'is_first_setup_completed',
             'default_cash',
@@ -143,6 +158,34 @@ class StoreSerializer(serializers.ModelSerializer):
             'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_logo_file(self, value):
+        max_size = 2 * 1024 * 1024
+        valid_types = {'image/png', 'image/jpeg', 'image/webp'}
+
+        if value.size > max_size:
+            raise serializers.ValidationError('El logo no debe superar 2 MB.')
+
+        content_type = getattr(value, 'content_type', '')
+        if content_type and content_type not in valid_types:
+            raise serializers.ValidationError('Formato de logo invalido (PNG, JPG o WebP).')
+
+        return value
+
+    def update(self, instance, validated_data):
+        logo_file = validated_data.pop('logo_file', None)
+
+        if logo_file:
+            try:
+                upload_data = cloudinary.uploader.upload(
+                    logo_file,
+                    folder='store-logos'
+                )
+                validated_data['logo_url'] = upload_data.get('secure_url')
+            except Exception as exc:
+                raise serializers.ValidationError({'logo_file': f'Error al subir imagen: {exc}'})
+
+        return super().update(instance, validated_data)
 
 
 class StoreMembershipSerializer(serializers.ModelSerializer):

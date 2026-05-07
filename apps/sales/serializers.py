@@ -3,6 +3,7 @@ Serializadores para la app Sales.
 ARCHITECTURE_V2: Ventas, items y pagos.
 """
 from rest_framework import serializers
+from django.db import transaction
 from .models import Sale, SaleItem, SalePayment
 
 
@@ -60,7 +61,7 @@ class SaleSerializer(serializers.ModelSerializer):
 
 
 class SaleCreateItemSerializer(serializers.Serializer):
-    product = serializers.IntegerField(allow_null=True, required=False)
+    product = serializers.UUIDField(allow_null=True, required=False)
     quantity = serializers.IntegerField()
     unit_price = serializers.DecimalField(max_digits=10, decimal_places=2)
 
@@ -79,27 +80,55 @@ class SaleCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])
-        sale = super().create(validated_data)
-        
-        from apps.products.models import Product
-        
-        for item_data in items_data:
-            # Si el frontend envía 'product' nulo, se puede omitir o manejar. 
-            product_id = item_data.get('product')
-            unit_cost = 0
-            if product_id:
-                try:
-                    product = Product.objects.get(id=product_id)
-                    unit_cost = product.base_cost or 0
-                except Product.DoesNotExist:
-                    pass
-                    
-            SaleItem.objects.create(
-                sale=sale,
-                product_id=product_id,
-                quantity=item_data.get('quantity'),
-                unit_price=item_data.get('unit_price'),
-                unit_cost=unit_cost
-            )
-            
+
+        # Crear la venta y los items de forma atómica; si hay product ids, actualizar stock
+        with transaction.atomic():
+            sale = super().create(validated_data)
+
+            from apps.products.models import Product
+            from apps.inventory.models import InventoryMovement
+
+            request = self.context.get('request') if hasattr(self, 'context') else None
+            user = getattr(request, 'user', None)
+
+            for item_data in items_data:
+                product_id = item_data.get('product')
+                qty = int(item_data.get('quantity') or 0)
+                unit_price = item_data.get('unit_price')
+                unit_cost = 0
+
+                product = None
+                if product_id:
+                    try:
+                        # lock product row to avoid races
+                        product = Product.objects.select_for_update().get(id=product_id)
+                        unit_cost = product.base_cost or 0
+                    except Product.DoesNotExist:
+                        product = None
+
+                sale_item = SaleItem.objects.create(
+                    sale=sale,
+                    product_id=product_id,
+                    quantity=qty,
+                    unit_price=unit_price,
+                    unit_cost=unit_cost
+                )
+
+                # Si tenemos product vinculado, decrementar stock y crear InventoryMovement
+                if product:
+                    stock_before = product.current_stock or 0
+                    # Evitar stock negativo: si qty > stock_before, dejar en 0
+                    new_stock = max(0, stock_before - qty)
+                    product.current_stock = new_stock
+                    product.save()
+
+                    InventoryMovement.objects.create(
+                        product=product,
+                        user=user if user and user.is_authenticated else None,
+                        movement_type=InventoryMovement.MovementType.SALE,
+                        quantity=qty * -1,
+                        stock_before=stock_before,
+                        stock_after=product.current_stock
+                    )
+
         return sale

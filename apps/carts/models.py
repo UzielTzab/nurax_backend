@@ -32,6 +32,15 @@ class ActiveCart(models.Model):
         default=0,
         help_text="Total temporal del carrito"
     )
+    is_parked = models.BooleanField(
+        default=False,
+        help_text="Indica si el carrito está aparcado (guardado para después)"
+    )
+    parked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Fecha/hora cuando el carrito fue aparcado"
+    )
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -43,6 +52,7 @@ class ActiveCart(models.Model):
             models.Index(fields=['store']),
             models.Index(fields=['user']),
             models.Index(fields=['session_id']),
+            models.Index(fields=['is_parked', 'user']),
         ]
     
     def __str__(self) -> str:

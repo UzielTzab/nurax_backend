@@ -5,6 +5,7 @@ from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from utils.auth_views import CustomTokenObtainPairView, CustomTokenRefreshView, LogoutView
 from apps.accounts.views import OnboardingWizardView
+from apps.carts.views import pusher_auth
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -16,6 +17,7 @@ urlpatterns = [
     path('api/v1/inventory/', include('apps.inventory.urls')),
     path('api/v1/expenses/', include('apps.expenses.urls')),
     path('api/v1/carts/', include('apps.carts.urls')),
+    path('api/pusher/auth/', pusher_auth),
     path('api/v1/onboarding/wizard/', OnboardingWizardView.as_view(), name='onboarding-wizard'),
     
     # Authentication - 🔒 HttpOnly Cookies

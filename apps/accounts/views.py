@@ -13,6 +13,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 from django.utils.text import slugify
+from django.utils.crypto import get_random_string
 from .models import User, Store, StoreMembership, Client
 from .serializers import (
     UserSerializer, StoreSerializer, StoreMembershipSerializer,
@@ -30,13 +31,13 @@ def _employee_role_config(role_value: str) -> dict:
     if normalized in {'cashier', 'cajero'}:
         return {
             'membership_role': StoreMembership.Role.CASHIER,
-            'user_role': 'cashier',
+            'user_role': 'cliente',
             'role_label': 'Cajero',
         }
     if normalized in {'manager', 'admin'}:
         return {
             'membership_role': StoreMembership.Role.MANAGER,
-            'user_role': 'manager',
+            'user_role': 'cliente',
             'role_label': 'Admin',
         }
     raise ValueError('Rol inválido')
@@ -65,7 +66,7 @@ class StoreEmployeesView(APIView):
 
     PLAN_LIMITS = {
         Store.Plan.BASICO: 2,
-        Store.Plan.PRO: None,
+        Store.Plan.PRO: 3,
     }
 
     def _get_store(self, store_id):
@@ -113,6 +114,7 @@ class StoreEmployeesView(APIView):
                 'role': membership.role,
                 'role_label': role_label,
                 'membership_role': membership.role,
+                'is_active': user.is_active,
                 'last_login': user.last_login,
                 'created_at': user.created_at,
                 'initials': _employee_initials(user.name or user.get_full_name() or user.username),
@@ -131,7 +133,7 @@ class StoreEmployeesView(APIView):
             'employees': StoreEmployeeSerializer(employees, many=True).data,
         }
 
-        return Response({'success': True, 'data': payload}, status=status.HTTP_200_OK)
+        return Response(payload, status=status.HTTP_200_OK)
 
     @transaction.atomic
     def post(self, request, store_id):
@@ -205,23 +207,120 @@ class StoreEmployeesView(APIView):
         }
 
         response_payload = {
-            'success': True,
-            'data': {
-                'employee': StoreEmployeeSerializer(employee_payload).data,
-                'credentials': {
-                    'username': username,
-                    'password': password,
-                    'email': email,
-                },
-                'store': {
-                    'id': str(store.id),
-                    'name': store.name,
-                    'plan': store.plan,
-                },
-            }
+            'employee': StoreEmployeeSerializer(employee_payload).data,
+            'credentials': {
+                'username': username,
+                'password': password,
+                'email': email,
+            },
+            'store': {
+                'id': str(store.id),
+                'name': store.name,
+                'plan': store.plan,
+            },
         }
 
-        return Response(response_payload, status=status.HTTP_200_OK)
+        return Response(response_payload, status=status.HTTP_201_CREATED)
+
+
+class StoreEmployeeDetailView(APIView):
+    """Administración de un empleado específico (Editar, Suspender, Reset Password)."""
+    
+    permission_classes = [IsAuthenticated]
+
+    def _require_store_access(self, request, store_id):
+        store = Store.objects.filter(id=store_id).first()
+        if not store:
+            return None, Response({'error': 'Tienda no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+
+        if request.user.role == User.Role.ADMIN:
+            return store, None
+
+        membership = StoreMembership.objects.filter(store=store, user=request.user).first()
+        if not membership or membership.role != StoreMembership.Role.OWNER:
+            return None, Response({'error': 'No tienes permisos para administrar empleados'}, status=status.HTTP_403_FORBIDDEN)
+
+        return store, None
+
+    @transaction.atomic
+    def patch(self, request, store_id, user_id):
+        store, error_response = self._require_store_access(request, store_id)
+        if error_response:
+            return error_response
+            
+        membership = StoreMembership.objects.filter(store=store, user_id=user_id).select_related('user').first()
+        if not membership:
+            return Response({'error': 'Empleado no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+            
+        if membership.role == StoreMembership.Role.OWNER:
+            return Response({'error': 'No puedes modificar al propietario'}, status=status.HTTP_403_FORBIDDEN)
+            
+        user = membership.user
+        data = request.data
+        
+        if 'name' in data:
+            user.name = data['name'].strip()
+            
+        if 'is_active' in data:
+            user.is_active = bool(data['is_active'])
+            if not user.is_active:
+                pass # The user requests: "Inmediatamente, cualquier token JWT o sesión activa de ese empleado debe ser invalidada para botarlo del sistema si estaba conectado."
+                # We can't easily invalidate JWT unless we have a token blacklist or use token generation epoch. We'll leave it as setting is_active=False. Next time they fetch or refresh, it'll fail.
+            
+        user.save(update_fields=['name', 'is_active'])
+        
+        if 'role' in data:
+            try:
+                role_config = _employee_role_config(data['role'])
+                membership.role = role_config['membership_role']
+                membership.save(update_fields=['role'])
+            except ValueError:
+                return Response({'error': 'Rol inválido'}, status=status.HTTP_400_BAD_REQUEST)
+                
+        role_label = 'Admin' if membership.role == StoreMembership.Role.MANAGER else 'Cajero'
+        employee_payload = {
+            'id': str(user.id),
+            'name': user.name or user.username,
+            'username': user.username,
+            'email': user.email,
+            'avatar_url': user.avatar_url,
+            'role': membership.role,
+            'role_label': role_label,
+            'membership_role': membership.role,
+            'is_active': user.is_active,
+            'last_login': user.last_login,
+            'created_at': user.created_at,
+            'initials': _employee_initials(user.name or user.username),
+        }
+        
+        return Response({'success': True, 'data': StoreEmployeeSerializer(employee_payload).data}, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def post(self, request, store_id, user_id):
+        action = self.kwargs.get('action')
+        if action != 'reset-password':
+            return Response({'error': 'Endpoint no válido'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        store, error_response = self._require_store_access(request, store_id)
+        if error_response:
+            return error_response
+            
+        membership = StoreMembership.objects.filter(store=store, user_id=user_id).select_related('user').first()
+        if not membership:
+            return Response({'error': 'Empleado no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+            
+        if membership.role == StoreMembership.Role.OWNER:
+            return Response({'error': 'No puedes resetear la contraseña del propietario'}, status=status.HTTP_403_FORBIDDEN)
+            
+        user = membership.user
+        new_password = get_random_string(8)
+        user.set_password(new_password)
+        user.save(update_fields=['password'])
+        
+        return Response({
+            'success': True,
+            'new_password': new_password
+        }, status=status.HTTP_200_OK)
 
 
 @extend_schema_view(

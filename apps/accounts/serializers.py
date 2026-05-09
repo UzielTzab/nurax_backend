@@ -214,6 +214,7 @@ class StoreEmployeeSerializer(serializers.Serializer):
     role = serializers.CharField()
     role_label = serializers.CharField()
     membership_role = serializers.CharField()
+    is_active = serializers.BooleanField(required=False, default=True)
     last_login = serializers.DateTimeField(allow_null=True, required=False)
     created_at = serializers.DateTimeField()
     initials = serializers.CharField()

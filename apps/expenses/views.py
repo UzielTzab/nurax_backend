@@ -131,8 +131,24 @@ class CashShiftViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        expected_cash = request.data.get('expected_cash')
+        actual_cash = request.data.get('actual_cash')
+        
         from django.utils import timezone
         shift.closed_at = timezone.now()
+        
+        if expected_cash is not None:
+            shift.expected_cash = expected_cash
+        if actual_cash is not None:
+            shift.actual_cash = actual_cash
+            
+        if expected_cash is not None and actual_cash is not None:
+            from decimal import Decimal
+            try:
+                shift.difference = Decimal(str(actual_cash)) - Decimal(str(expected_cash))
+            except Exception:
+                pass
+                
         shift.save()
         
         serializer = self.get_serializer(shift)

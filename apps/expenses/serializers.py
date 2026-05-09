@@ -22,14 +22,20 @@ class CashShiftSerializer(serializers.ModelSerializer):
     """Serializer para turnos de caja."""
     
     movements = CashMovementSerializer(many=True, read_only=True)
+    opened_by_name = serializers.SerializerMethodField()
     
     class Meta:
         model = CashShift
         fields = [
-            'id', 'store', 'opened_by', 'opened_at', 'closed_at',
-            'starting_cash', 'is_open', 'movements', 'created_at'
+            'id', 'store', 'opened_by', 'opened_by_name', 'opened_at', 'closed_at',
+            'starting_cash', 'expected_cash', 'actual_cash', 'difference', 'is_open', 'movements', 'created_at'
         ]
         read_only_fields = ['id', 'opened_at', 'is_open']
+        
+    def get_opened_by_name(self, obj):
+        if not obj.opened_by:
+            return "Desconocido"
+        return obj.opened_by.first_name or obj.opened_by.name or obj.opened_by.username or "Desconocido"
 
 
 class ExpenseCategorySerializer(serializers.ModelSerializer):

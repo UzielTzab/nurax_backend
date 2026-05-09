@@ -36,6 +36,27 @@ class CashShift(models.Model):
         validators=[MinValueValidator(Decimal('0.00'))],
         help_text="Fondo de caja inicial"
     )
+    expected_cash = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Efectivo esperado al cierre"
+    )
+    actual_cash = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Efectivo real contado al cierre"
+    )
+    difference = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Diferencia (actual_cash - expected_cash)"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

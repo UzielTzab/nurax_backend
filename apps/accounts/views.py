@@ -11,15 +11,217 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from drf_spectacular.utils import extend_schema_view, extend_schema
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.utils import timezone
+from django.utils.text import slugify
 from .models import User, Store, StoreMembership, Client
 from .serializers import (
     UserSerializer, StoreSerializer, StoreMembershipSerializer,
     ClientSerializer, StoreWithMembershipsSerializer, UserRegistrationSerializer,
-    StoreWithOwnerSerializer, OnboardingWizardSerializer
+    StoreWithOwnerSerializer, OnboardingWizardSerializer, StoreEmployeeSerializer,
+    StoreEmployeeCreateSerializer
 )
 from apps.products.models import Category, Supplier
 
 User = get_user_model()
+
+
+def _employee_role_config(role_value: str) -> dict:
+    normalized = (role_value or '').strip().lower()
+    if normalized in {'cashier', 'cajero'}:
+        return {
+            'membership_role': StoreMembership.Role.CASHIER,
+            'user_role': 'cashier',
+            'role_label': 'Cajero',
+        }
+    if normalized in {'manager', 'admin'}:
+        return {
+            'membership_role': StoreMembership.Role.MANAGER,
+            'user_role': 'manager',
+            'role_label': 'Admin',
+        }
+    raise ValueError('Rol inválido')
+
+
+def _build_dummy_email(store_name: str, username: str, suffix: int | None = None) -> str:
+    store_slug = slugify(store_name) or 'tienda'
+    username_slug = slugify(username).replace('-', '_') or 'empleado'
+    if suffix is not None:
+        username_slug = f'{username_slug}{suffix}'
+    return f'{username_slug}@{store_slug}.nurax'
+
+
+def _employee_initials(name: str) -> str:
+    parts = [part for part in (name or '').strip().split() if part]
+    if not parts:
+        return 'NU'
+    initials = ''.join(part[0] for part in parts[:2]).upper()
+    return initials[:2]
+
+
+class StoreEmployeesView(APIView):
+    """Lista y crea empleados por tienda."""
+
+    permission_classes = [IsAuthenticated]
+
+    PLAN_LIMITS = {
+        Store.Plan.BASICO: 2,
+        Store.Plan.PRO: None,
+    }
+
+    def _get_store(self, store_id):
+        return Store.objects.filter(id=store_id).first()
+
+    def _can_manage_store(self, request_user, store):
+        if request_user.role == User.Role.ADMIN:
+            return True
+
+        membership = StoreMembership.objects.filter(store=store, user=request_user).first()
+        return bool(membership and membership.role == StoreMembership.Role.OWNER)
+
+    def _require_store_access(self, request, store_id):
+        store = self._get_store(store_id)
+        if not store:
+            return None, Response({'error': 'Tienda no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not self._can_manage_store(request.user, store):
+            return None, Response({'error': 'No tienes permisos para administrar este equipo'}, status=status.HTTP_403_FORBIDDEN)
+
+        return store, None
+
+    def get(self, request, store_id):
+        store, error_response = self._require_store_access(request, store_id)
+        if error_response:
+            return error_response
+
+        memberships = (
+            StoreMembership.objects
+            .filter(store=store)
+            .select_related('user')
+            .order_by('created_at')
+        )
+
+        employees = []
+        for membership in memberships:
+            user = membership.user
+            role_label = 'Propietario' if membership.role == StoreMembership.Role.OWNER else 'Admin' if membership.role == StoreMembership.Role.MANAGER else 'Cajero'
+            employees.append({
+                'id': str(user.id),
+                'name': user.name or user.get_full_name() or user.username,
+                'username': user.username,
+                'email': user.email,
+                'avatar_url': user.avatar_url,
+                'role': membership.role,
+                'role_label': role_label,
+                'membership_role': membership.role,
+                'last_login': user.last_login,
+                'created_at': user.created_at,
+                'initials': _employee_initials(user.name or user.get_full_name() or user.username),
+            })
+
+        plan_limit = self.PLAN_LIMITS.get(store.plan)
+        payload = {
+            'store': {
+                'id': str(store.id),
+                'name': store.name,
+                'plan': store.plan,
+            },
+            'plan_limit': plan_limit,
+            'employees_count': len(employees),
+            'can_add_more': plan_limit is None or len(employees) < plan_limit,
+            'employees': StoreEmployeeSerializer(employees, many=True).data,
+        }
+
+        return Response({'success': True, 'data': payload}, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def post(self, request, store_id):
+        store, error_response = self._require_store_access(request, store_id)
+        if error_response:
+            return error_response
+
+        store = Store.objects.select_for_update().get(id=store.id)
+
+        plan_limit = self.PLAN_LIMITS.get(store.plan)
+        current_count = StoreMembership.objects.filter(store=store).count()
+        if plan_limit is not None and current_count >= plan_limit:
+            return Response({'error': 'Límite de empleados alcanzado'}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = StoreEmployeeCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        employee_name = serializer.validated_data['name'].strip()
+        provided_username = serializer.validated_data.get('username') or ''
+        provided_email = serializer.validated_data.get('email') or ''
+        password = serializer.validated_data['password']
+        role_config = _employee_role_config(serializer.validated_data['role'])
+
+        base_username = serializer.resolve_username(store.name, employee_name, provided_username)
+        username = base_username
+        email = provided_email.strip()
+        email_is_generated = not bool(email)
+
+        if email and User.objects.filter(email=email).exists():
+            return Response({'error': 'Este email ya está registrado.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        suffix = 1
+        while User.objects.filter(username=username).exists() or User.objects.filter(email=email or _build_dummy_email(store.name, username)).exists():
+            if provided_username:
+                return Response({'error': 'El usuario de ingreso ya existe.'}, status=status.HTTP_400_BAD_REQUEST)
+            username = f'{base_username}_{suffix}'[:150]
+            suffix += 1
+            if email_is_generated:
+                email = _build_dummy_email(store.name, username)
+
+        if not email:
+            email = _build_dummy_email(store.name, username)
+
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            name=employee_name,
+            role=role_config['user_role'],
+        )
+        user.set_password(password)
+        user.save()
+
+        membership = StoreMembership.objects.create(
+            store=store,
+            user=user,
+            role=role_config['membership_role'],
+        )
+
+        employee_payload = {
+            'id': str(user.id),
+            'name': user.name or user.username,
+            'username': user.username,
+            'email': user.email,
+            'avatar_url': user.avatar_url,
+            'role': membership.role,
+            'role_label': role_config['role_label'],
+            'membership_role': membership.role,
+            'last_login': user.last_login,
+            'created_at': user.created_at,
+            'initials': _employee_initials(user.name or user.username),
+        }
+
+        response_payload = {
+            'success': True,
+            'data': {
+                'employee': StoreEmployeeSerializer(employee_payload).data,
+                'credentials': {
+                    'username': username,
+                    'password': password,
+                    'email': email,
+                },
+                'store': {
+                    'id': str(store.id),
+                    'name': store.name,
+                    'plan': store.plan,
+                },
+            }
+        }
+
+        return Response(response_payload, status=status.HTTP_200_OK)
 
 
 @extend_schema_view(

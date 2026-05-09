@@ -5,6 +5,7 @@ ARCHITECTURE_V2: Usuarios, tiendas y membresías.
 import cloudinary.uploader
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from django.utils.text import slugify
 from .models import User, Store, StoreMembership, Client
 
 User = get_user_model()
@@ -68,6 +69,7 @@ class UserSerializer(serializers.ModelSerializer):
         return {
             'id': str(store.id),
             'name': store.name,
+            'membership_role': membership.role,
             'plan': store.plan,
             'tax_id': store.tax_id,
             'active': store.active,
@@ -201,6 +203,58 @@ class StoreMembershipSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at']
 
 
+class StoreEmployeeSerializer(serializers.Serializer):
+    """Serializer para listar empleados de una tienda."""
+
+    id = serializers.CharField()
+    name = serializers.CharField()
+    username = serializers.CharField()
+    email = serializers.EmailField()
+    avatar_url = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    role = serializers.CharField()
+    role_label = serializers.CharField()
+    membership_role = serializers.CharField()
+    last_login = serializers.DateTimeField(allow_null=True, required=False)
+    created_at = serializers.DateTimeField()
+    initials = serializers.CharField()
+
+
+class StoreEmployeeCreateSerializer(serializers.Serializer):
+    """Serializer para crear empleados de tienda."""
+
+    name = serializers.CharField(max_length=200)
+    username = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    password = serializers.CharField(min_length=8)
+    role = serializers.CharField()
+
+    def validate_role(self, value):
+        normalized = (value or '').strip().lower()
+        allowed = {'cashier', 'cajero', 'manager', 'admin'}
+        if normalized not in allowed:
+            raise serializers.ValidationError('Rol inválido.')
+        return normalized
+
+    def validate(self, data):
+        name = (data.get('name') or '').strip()
+        if not name:
+            raise serializers.ValidationError({'name': 'El nombre es obligatorio.'})
+
+        if not data.get('password'):
+            raise serializers.ValidationError({'password': 'La contraseña es obligatoria.'})
+
+        return data
+
+    def resolve_username(self, store_name: str, employee_name: str, provided_username: str | None = None) -> str:
+        if provided_username:
+            return slugify(provided_username).replace('-', '_')[:150]
+
+        store_slug = slugify(store_name).replace('-', '_') or 'tienda'
+        employee_slug = slugify(employee_name).replace('-', '_') or 'empleado'
+        return f'{store_slug}_{employee_slug}'[:150]
+
+
+
 class ClientSerializer(serializers.ModelSerializer):
     """Serializer para clientes."""
     
@@ -256,6 +310,7 @@ class StoreWithOwnerSerializer(serializers.Serializer):
                 email=email,
                 username=username,
                 name=name,
+                role=User.Role.CLIENTE,
                 password='nurax123'  # Password por defecto
             )
             

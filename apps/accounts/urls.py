@@ -4,7 +4,7 @@ ARCHITECTURE_V2: Usuarios, tiendas y membresías.
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import UserViewSet, StoreViewSet, StoreMembershipViewSet, ClientViewSet
+from .views import UserViewSet, StoreViewSet, StoreMembershipViewSet, ClientViewSet, StoreEmployeesView
 
 router = DefaultRouter()
 # NO registrar UserViewSet en router - usaremos rutas explícitas para tener control
@@ -15,6 +15,7 @@ router.register('clients', ClientViewSet, basename='client')
 
 # Rutas explícitas para UserViewSet para máximo control sobre nombres de rutas
 urlpatterns = [
+    path('stores/<uuid:store_id>/employees/', StoreEmployeesView.as_view(), name='store-employees'),
     path('users/me/', UserViewSet.as_view({'get': 'me', 'patch': 'me'}), name='user-me'),
     path('users/register/', UserViewSet.as_view({'post': 'register'}), name='user-register'),
     path('users/software-clients/', UserViewSet.as_view({'get': 'software_clients'}), name='software-clients-list'),

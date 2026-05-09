@@ -4,7 +4,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from utils.auth_views import CustomTokenObtainPairView, CustomTokenRefreshView, LogoutView
-from apps.accounts.views import OnboardingWizardView
+from apps.accounts.views import OnboardingWizardView, StoreEmployeesView
 from apps.carts.views import pusher_auth
 
 urlpatterns = [
@@ -12,6 +12,7 @@ urlpatterns = [
     
     # API v1 - ARCHITECTURE_V2 (apps in apps/ folder)
     path('api/v1/accounts/', include('apps.accounts.urls')),
+    path('api/v1/stores/<uuid:store_id>/employees/', StoreEmployeesView.as_view(), name='store-employees-exact'),
     path('api/v1/products/', include('apps.products.urls')),
     path('api/v1/sales/', include('apps.sales.urls')),
     path('api/v1/inventory/', include('apps.inventory.urls')),

@@ -20,14 +20,15 @@ Documentación técnica para desarrolladores y agentes de IA que trabajan en el 
 
 ```
 nurax_backend/
-├── accounts/          # Auth multi-tenant, usuarios, stores, membresías
-├── products/          # Catálogo de productos con códigos/empaques
-├── sales/             # Transacciones de venta con pagos
-├── inventory/         # Kárdex (InventoryMovement) - solo lectura
-├── expenses/          # Caja, gastos, órdenes de compra
-├── carts/             # Carrito en tiempo real (WebSocket-ready)
-├── api/               # Shared: exceptions, constants
-└── nurax_backend/     # Config central
+├── apps/              # Aplicaciones de dominio
+│   ├── accounts/      # Auth multi-tenant, usuarios, stores, membresías
+│   ├── products/      # Catálogo de productos con códigos/empaques
+│   ├── sales/         # Transacciones de venta con pagos
+│   ├── inventory/     # Kárdex (InventoryMovement) - solo lectura
+│   ├── expenses/      # Caja, gastos, órdenes de compra
+│   └── carts/         # Carrito en tiempo real (WebSocket-ready)
+├── core/              # Config central (settings, asgi, wsgi, urls principales)
+└── utils/             # Compartido: excepciones, constantes, helpers
 ```
 
 ### Aplicaciones & Responsabilidades - V2

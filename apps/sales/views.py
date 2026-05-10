@@ -57,6 +57,54 @@ class SaleViewSet(viewsets.ModelViewSet):
         """Crear venta."""
         serializer.save()
 
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        """Cancelar una venta completada y retornar productos al inventario."""
+        sale = self.get_object()
+        
+        # Validación de RBAC (Role-Based Access Control)
+        user = request.user
+        role = getattr(user, 'role', 'cliente')
+        
+        # Verificar rol en StoreMembership si no es admin global
+        if role != 'admin':
+            from apps.accounts.models import StoreMembership
+            membership = StoreMembership.objects.filter(user=user, store=sale.store).first()
+            if not membership or membership.role == StoreMembership.Role.CASHIER:
+                return Response(
+                    {'error': 'No tienes permisos para cancelar ventas. Contacta al administrador.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+                
+        if sale.status == Sale.Status.CANCELLED:
+            return Response(
+                {'error': 'La venta ya está cancelada.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        with transaction.atomic():
+            sale.status = Sale.Status.CANCELLED
+            sale.save()
+            
+            # Retornar productos al inventario
+            from apps.inventory.models import InventoryMovement
+            for item in sale.items.all():
+                if item.product:
+                    stock_before = item.product.current_stock or 0
+                    item.product.current_stock = stock_before + item.quantity
+                    item.product.save()
+                    
+                    InventoryMovement.objects.create(
+                        product=item.product,
+                        user=user,
+                        movement_type=InventoryMovement.MovementType.ADJUSTMENT, # o RETURN
+                        quantity=item.quantity,
+                        stock_before=stock_before,
+                        stock_after=item.product.current_stock
+                    )
+                    
+        return Response({'status': 'cancelled'})
+
 
 @extend_schema_view(
     list=extend_schema(tags=["Items de Venta"]),

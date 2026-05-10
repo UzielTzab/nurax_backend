@@ -45,18 +45,29 @@ class SaleSerializer(serializers.ModelSerializer):
     payments = SalePaymentSerializer(many=True, read_only=True)
     customer_name = serializers.CharField(source='customer.name', read_only=True, allow_null=True)
     balance_due = serializers.SerializerMethodField()
+    cashier = serializers.SerializerMethodField()
     
     class Meta:
         model = Sale
         fields = [
-            'id', 'store', 'cash_shift', 'customer', 'customer_name',
-            'status', 'total_amount', 'amount_paid', 'balance_due',
+            'id', 'store', 'cash_shift', 'cashier', 'customer', 'customer_name',
+            'status', 'total_amount', 'amount_paid', 'amount_tendered', 'change', 'balance_due',
             'items', 'payments', 'created_at'
         ]
-        read_only_fields = ['id', 'created_at', 'balance_due']
+        read_only_fields = ['id', 'created_at', 'balance_due', 'cashier']
     
     def get_balance_due(self, obj):
         return str(obj.balance_due)
+        
+    def get_cashier(self, obj):
+        if not obj.cash_shift or not obj.cash_shift.opened_by:
+            return None
+        user = obj.cash_shift.opened_by
+        return {
+            'id': str(user.id),
+            'name': user.first_name or user.name or user.username,
+            'username': user.username
+        }
 
 
 
@@ -75,7 +86,7 @@ class SaleCreateSerializer(serializers.ModelSerializer):
         model = Sale
         fields = [
             'id', 'store', 'cash_shift', 'customer', 'status',
-            'total_amount', 'amount_paid', 'items'
+            'total_amount', 'amount_paid', 'amount_tendered', 'change', 'items'
         ]
 
     def create(self, validated_data):
@@ -84,6 +95,35 @@ class SaleCreateSerializer(serializers.ModelSerializer):
         # Crear la venta y los items de forma atómica; si hay product ids, actualizar stock
         with transaction.atomic():
             sale = super().create(validated_data)
+            # Determinar amount_tendered: si no se envía, usar amount_paid como valor recibido
+            amount_tendered = validated_data.get('amount_tendered')
+            if amount_tendered is None:
+                amount_tendered = validated_data.get('amount_paid')
+            # Calcular change (cambio) solo si amount_tendered está definido
+            if amount_tendered is not None:
+                try:
+                    from decimal import Decimal
+                    total = Decimal(str(sale.total_amount))
+                    tender = Decimal(str(amount_tendered))
+                    change = tender - total if tender > total else Decimal('0')
+                except Exception:
+                    change = Decimal('0')
+                sale.amount_tendered = amount_tendered
+                sale.change = change
+                sale.save()
+            # Calcular y asignar amount_tendered y change si se envían
+            amount_tendered = validated_data.get('amount_tendered')
+            if amount_tendered is not None:
+                try:
+                    from decimal import Decimal
+                    total = Decimal(str(sale.total_amount))
+                    tender = Decimal(str(amount_tendered))
+                    change = tender - total if tender > total else Decimal('0')
+                except Exception:
+                    change = Decimal('0')
+                sale.amount_tendered = amount_tendered
+                sale.change = change
+                sale.save()
 
             from apps.products.models import Product
             from apps.inventory.models import InventoryMovement

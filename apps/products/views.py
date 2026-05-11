@@ -4,17 +4,45 @@ ARCHITECTURE_V2: Catálogo, categorías, proveedores y códigos.
 """
 import uuid
 from django.db import transaction as db_transaction
+from django.db.models import Q
 from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from drf_spectacular.utils import extend_schema_view, extend_schema
+from django_filters import FilterSet, CharFilter, ChoiceFilter
 from .models import Product, Category, Supplier, ProductPackaging, ProductCode
 from .serializers import (
     ProductSerializer, CategorySerializer, SupplierSerializer,
     ProductPackagingSerializer, ProductCodeSerializer, ProductSimpleSerializer
 )
+
+
+class ProductFilterSet(FilterSet):
+    """FilterSet personalizado para Product con soporte para stock_status."""
+    
+    stock_status = ChoiceFilter(
+        method='filter_stock_status',
+        choices=[
+            ('low_stock', 'Stock bajo (<5)'),
+            ('out_of_stock', 'Sin stock (0)'),
+        ]
+    )
+    
+    def filter_stock_status(self, queryset, name, value):
+        """Filtrar por estado de stock basado en current_stock."""
+        if value == 'low_stock':
+            # Stock bajo: mayor que 0 pero menor que 5
+            return queryset.filter(current_stock__gt=0, current_stock__lt=5)
+        elif value == 'out_of_stock':
+            # Sin stock: igual a 0
+            return queryset.filter(current_stock=0)
+        return queryset
+    
+    class Meta:
+        model = Product
+        fields = ['store', 'category', 'supplier', 'stock_status']
 
 
 @extend_schema_view(
@@ -135,7 +163,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = ProductSerializer
     queryset = Product.objects.all()
-    filterset_fields = ['store', 'category', 'supplier']
+    filterset_class = ProductFilterSet
     # Permitimos buscar por nombre y por códigos asociados (ean13, upc, etc.)
     search_fields = ['name', 'codes__code']
     ordering_fields = ['name', 'created_at', 'current_stock', 'sale_price']

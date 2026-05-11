@@ -2,7 +2,9 @@
 Vistas para la app Sales.
 ARCHITECTURE_V2: Ventas, items y pagos.
 """
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, status
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -10,6 +12,25 @@ from drf_spectacular.utils import extend_schema_view, extend_schema
 from django.db import transaction
 from .models import Sale, SaleItem, SalePayment
 from .serializers import SaleSerializer, SaleItemSerializer, SalePaymentSerializer, SaleCreateSerializer
+
+
+class SaleSearchFilter(SearchFilter):
+    """Normaliza IDs visibles como #NX-A4C054 antes de buscar en Sale.id."""
+
+    def get_search_terms(self, request):
+        terms = super().get_search_terms(request)
+        normalized_terms = []
+
+        for term in terms:
+            cleaned = term.strip()
+            cleaned_without_hash = cleaned[1:] if cleaned.startswith('#') else cleaned
+
+            if cleaned_without_hash.upper().startswith('NX-'):
+                normalized_terms.append(cleaned_without_hash[3:])
+            else:
+                normalized_terms.append(cleaned)
+
+        return normalized_terms
 
 
 @extend_schema_view(
@@ -27,8 +48,9 @@ class SaleViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = SaleSerializer
     queryset = Sale.objects.all()
+    filter_backends = [DjangoFilterBackend, SaleSearchFilter, OrderingFilter]
     filterset_fields = ['store', 'status', 'cash_shift']
-    search_fields = ['id']
+    search_fields = ['id', 'transaction_id', 'items__product__name']
     ordering_fields = ['created_at', 'total_amount', 'status']
     ordering = ['-created_at']
     
@@ -38,7 +60,7 @@ class SaleViewSet(viewsets.ModelViewSet):
         stores = StoreMembership.objects.filter(
             user=self.request.user
         ).values_list('store_id', flat=True)
-        return Sale.objects.filter(store_id__in=stores)
+        return Sale.objects.filter(store_id__in=stores).distinct()
     
     def get_serializer_class(self):
         if self.action == 'create':

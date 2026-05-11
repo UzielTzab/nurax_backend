@@ -21,13 +21,13 @@ class SalePaymentInline(admin.TabularInline):
 
 @admin.register(Sale)
 class SaleAdmin(admin.ModelAdmin):
-    list_display = ['id', 'store', 'status', 'total_amount', 'amount_paid', 'created_at']
+    list_display = ['id', 'transaction_id', 'store', 'status', 'total_amount', 'amount_paid', 'created_at']
     list_filter = ['status', 'store', 'created_at']
-    search_fields = ['store__name', 'customer__name']
+    search_fields = ['id', 'transaction_id', 'store__name', 'customer__name']
     readonly_fields = ['id', 'balance_due', 'created_at', 'updated_at']
     inlines = [SaleItemInline, SalePaymentInline]
     fieldsets = (
-        ('Información', {'fields': ('id', 'store', 'customer', 'cash_shift', 'status')}),
+        ('Información', {'fields': ('id', 'transaction_id', 'store', 'customer', 'cash_shift', 'status')}),
         ('Montos', {'fields': ('total_amount', 'amount_paid', 'balance_due')}),
         ('Timestamps', {'fields': ('created_at', 'updated_at')}),
     )

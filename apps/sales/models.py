@@ -17,6 +17,13 @@ class Sale(models.Model):
         CANCELLED = 'cancelled', 'Cancelada'
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    transaction_id = models.CharField(
+        max_length=64,
+        blank=True,
+        default='',
+        db_index=True,
+        help_text="Identificador externo/ticket de la venta"
+    )
     store = models.ForeignKey(
         'accounts.Store',
         on_delete=models.CASCADE,

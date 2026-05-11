@@ -642,9 +642,8 @@ class OnboardingWizardView(APIView):
             store.name = data['tienda']['nombre']
             store.tax_id = data['tienda'].get('identificador_fiscal', '')
             store.niche = data['tienda']['nicho']
-            store.default_cash = data['configuracion']['fondo_inicial_defecto']
             store.is_first_setup_completed = True
-            store.save(update_fields=['name', 'tax_id', 'niche', 'default_cash', 'is_first_setup_completed'])
+            store.save(update_fields=['name', 'tax_id', 'niche', 'is_first_setup_completed'])
 
             created_categories = 0
             for category_name in niche_categories.get(store.niche, []):

@@ -357,16 +357,27 @@ class OnboardingTiendaSerializer(serializers.Serializer):
 
 
 class OnboardingConfiguracionSerializer(serializers.Serializer):
-    fondo_inicial_defecto = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0)
+    """Configuración inicial (campos opcionales, no procesados en backend)."""
+    fondo_inicial_defecto = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        min_value=0,
+        required=False,
+        allow_null=True
+    )
 
 
 class OnboardingProveedorSerializer(serializers.Serializer):
-    incluir = serializers.BooleanField(default=True)
+    incluir = serializers.BooleanField(default=False)
     nombre = serializers.CharField(max_length=200, required=False, allow_blank=True)
     telefono = serializers.CharField(max_length=50, required=False, allow_blank=True)
 
 
 class OnboardingWizardSerializer(serializers.Serializer):
+    """Wizard simplificado: Solo crea tienda, categorías y proveedor opcional.
+    
+    La configuración (fondo inicial) se acepta pero no se procesa.
+    """
     tienda = OnboardingTiendaSerializer()
-    configuracion = OnboardingConfiguracionSerializer()
-    proveedor_inicial = OnboardingProveedorSerializer()
+    configuracion = OnboardingConfiguracionSerializer(required=False)
+    proveedor_inicial = OnboardingProveedorSerializer(required=False)

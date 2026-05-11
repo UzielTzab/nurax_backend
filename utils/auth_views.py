@@ -11,8 +11,60 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken, Token
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from drf_spectacular.utils import extend_schema
+
+
+class CustomRefreshToken(RefreshToken):
+    """
+    Custom RefreshToken que usa 'user_id' (UUID) como identificador.
+    
+    Por defecto, simplejwt usa USERNAME_FIELD (email). Esto personaliza
+    para usar el UUID del usuario, permitiendo cambios de email.
+    """
+    
+    @classmethod
+    def for_user(cls, user):
+        """Crea un refresh token para el usuario con user_id como identificador."""
+        token = super().for_user(user)
+        # Asegurar que user_id esté en el token
+        token['user_id'] = str(user.id)
+        # Cambiar 'sub' a user_id
+        token['sub'] = str(user.id)
+        return token
+
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """
+    Personaliza el serializer de obtención de tokens para incluir 'user_id' (UUID)
+    como el identificador principal en lugar de USERNAME_FIELD (email).
+    
+    Esto permite que el usuario pueda cambiar su email sin que se invaliden los tokens JWT.
+    """
+    
+    @classmethod
+    def get_token(cls, user):
+        """
+        Genera un token JWT con 'user_id' como claim principal.
+        
+        Reemplaza el 'sub' (subject) por defecto (que sería email) con el user_id (UUID).
+        """
+        token = super().get_token(user)
+        # Usar UUID del usuario como identificador principal
+        token['user_id'] = str(user.id)
+        # Cambiar 'sub' para que contenga el UUID en lugar del email
+        token['sub'] = str(user.id)
+        return token
+    
+    def validate(self, attrs):
+        """Usa CustomRefreshToken en lugar de RefreshToken."""
+        data = super().validate(attrs)
+        # Reemplazar el refresh token con uno personalizado
+        user = self.user
+        refresh = CustomRefreshToken.for_user(user)
+        data['refresh'] = str(refresh)
+        return data
 
 
 @extend_schema(tags=["Autenticación"])
@@ -24,7 +76,12 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     Body: { "email": "user@example.com", "password": "password" }
     
     Response: SET-COOKIE headers with access_token and refresh_token (HttpOnly, Secure, SameSite=Strict)
+    
+    Los tokens incluyen 'user_id' (UUID) como identificador, permitiendo que el usuario
+    cambie su email sin invalidar tokens.
     """
+    
+    serializer_class = CustomTokenObtainPairSerializer
     
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)

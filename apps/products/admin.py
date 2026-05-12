@@ -1,9 +1,7 @@
-"""
-Configuración de admin para la app Products - ARCHITECTURE_V2.
-"""
 from django.contrib import admin
-from .models import Category, Supplier, Product, ProductPackaging, ProductCode
-
+from .models import (
+    Category, Supplier, Product, ProductPackaging, ProductCode, ProductVariation
+)
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
@@ -16,7 +14,6 @@ class CategoryAdmin(admin.ModelAdmin):
         ('Timestamps', {'fields': ('created_at', 'updated_at')}),
     )
 
-
 @admin.register(Supplier)
 class SupplierAdmin(admin.ModelAdmin):
     list_display = ['name', 'store', 'contact_info', 'created_at']
@@ -27,7 +24,6 @@ class SupplierAdmin(admin.ModelAdmin):
         ('Información', {'fields': ('id', 'store', 'name', 'contact_info')}),
         ('Timestamps', {'fields': ('created_at', 'updated_at')}),
     )
-
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
@@ -42,7 +38,6 @@ class ProductAdmin(admin.ModelAdmin):
         ('Timestamps', {'fields': ('created_at', 'updated_at')}),
     )
 
-
 @admin.register(ProductPackaging)
 class ProductPackagingAdmin(admin.ModelAdmin):
     list_display = ['name', 'product', 'quantity_per_unit', 'created_at']
@@ -54,7 +49,6 @@ class ProductPackagingAdmin(admin.ModelAdmin):
         ('Timestamps', {'fields': ('created_at', 'updated_at')}),
     )
 
-
 @admin.register(ProductCode)
 class ProductCodeAdmin(admin.ModelAdmin):
     list_display = ['code', 'product', 'code_type', 'created_at']
@@ -63,5 +57,16 @@ class ProductCodeAdmin(admin.ModelAdmin):
     readonly_fields = ['id', 'created_at', 'updated_at']
     fieldsets = (
         ('Información', {'fields': ('id', 'product', 'code', 'code_type')}),
+        ('Timestamps', {'fields': ('created_at', 'updated_at')}),
+    )
+
+@admin.register(ProductVariation)
+class ProductVariationAdmin(admin.ModelAdmin):
+    list_display = ['variation_value', 'product', 'variation_type', 'created_at']
+    list_filter = ['variation_type', 'created_at']
+    search_fields = ['variation_value', 'product__name']
+    readonly_fields = ['id', 'created_at', 'updated_at']
+    fieldsets = (
+        ('Información', {'fields': ('id', 'product', 'variation_type', 'variation_value')}),
         ('Timestamps', {'fields': ('created_at', 'updated_at')}),
     )

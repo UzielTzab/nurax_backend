@@ -1,12 +1,9 @@
-"""
-URLs para la app Products.
-ARCHITECTURE_V2: Catálogo, categorías, proveedores y códigos.
-"""
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+
 from .views import (
     ProductViewSet, CategoryViewSet, SupplierViewSet,
-    ProductPackagingViewSet, ProductCodeViewSet
+    ProductPackagingViewSet, ProductCodeViewSet, ProductVariationViewSet
 )
 
 router = DefaultRouter()
@@ -15,6 +12,7 @@ router.register('categories', CategoryViewSet, basename='category')
 router.register('suppliers', SupplierViewSet, basename='supplier')
 router.register('packagings', ProductPackagingViewSet, basename='packaging')
 router.register('codes', ProductCodeViewSet, basename='code')
+router.register('variations', ProductVariationViewSet, basename='variation')
 
 urlpatterns = [
     path('', include(router.urls)),

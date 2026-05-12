@@ -92,47 +92,14 @@ class Product(models.Model):
     """Producto del catálogo."""
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    store = models.ForeignKey(
-        'accounts.Store',
-        on_delete=models.CASCADE,
-        related_name='products'
-    )
-    category = models.ForeignKey(
-        Category,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='products'
-    )
-    supplier = models.ForeignKey(
-        Supplier,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='products'
-    )
     name = models.CharField(max_length=250, help_text="Nombre del producto")
-    base_cost = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        validators=[MinValueValidator(Decimal('0.00'))],
-        help_text="Costo base para el dueño"
-    )
-    sale_price = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        validators=[MinValueValidator(Decimal('0.01'))],
-        help_text="Precio de venta al público"
-    )
-    current_stock = models.PositiveIntegerField(
-        default=0,
-        help_text="Stock disponible actual"
-    )
-    image_url = models.URLField(
-        max_length=500,
-        null=True,
-        blank=True,
-        help_text="URL de la imagen del producto en Cloudinary"
-    )
+    store = models.ForeignKey('accounts.Store', on_delete=models.CASCADE, related_name='products')
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='products')
+    supplier = models.ForeignKey(Supplier, on_delete=models.SET_NULL, null=True, blank=True, related_name='products')
+    base_cost = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))], help_text="Costo base para el dueño")
+    sale_price = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))], help_text="Precio de venta al público")
+    current_stock = models.PositiveIntegerField(default=0, help_text="Stock disponible actual")
+    image_url = models.URLField(max_length=500, null=True, blank=True, help_text="URL de la imagen del producto en Cloudinary")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -213,3 +180,29 @@ class ProductCode(models.Model):
     
     def __str__(self) -> str:
         return f"{self.product.name} - {self.code_type}: {self.code}"
+
+
+class ProductVariation(models.Model):
+    """Variacion de un producto"""
+    class VariationType(models.TextChoices):
+        COLOR = 'color', 'Color'
+        SIZE = 'size', 'Talla'
+        WEIGHT = 'weight', 'Peso'
+        MATERIAL = 'material', 'Material'
+        OTHER = 'other', 'Otro'
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='variations')
+    variation_type = models.CharField(max_length=15, choices=VariationType.choices, help_text="Tipo de variación")
+    variation_value = models.CharField(max_length=100, help_text="Valor de la variación")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'product_variation'
+        verbose_name = "Variación de producto"
+        verbose_name_plural = "Variaciones de producto"
+        unique_together = [['product', 'variation_value']]
+    
+    def __str__(self) -> str:
+        return f"{self.product.name} - {self.variation_type}: {self.variation_value}"

@@ -421,16 +421,39 @@ class UserViewSet(viewsets.GenericViewSet):
             .order_by('-created_at')
         )
 
+        search_query = request.query_params.get('search', '').lower()
+        status_filter = request.query_params.get('status', 'all')
+        
+        try:
+            page = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 10))
+        except ValueError:
+            page = 1
+            page_size = 10
+
         seen_users = set()
         results = []
         for membership in memberships:
             if membership.user_id in seen_users:
                 continue
+            
+            user_name = membership.user.name or membership.user.username
+            user_email = membership.user.email
+            
+            if search_query:
+                if search_query not in user_name.lower() and search_query not in user_email.lower():
+                    continue
+                    
+            if status_filter == 'active' and not membership.user.is_active:
+                continue
+            if status_filter == 'inactive' and membership.user.is_active:
+                continue
+                
             seen_users.add(membership.user_id)
             results.append({
                 'id': str(membership.user.id),
-                'name': membership.user.name or membership.user.username,
-                'email': membership.user.email,
+                'name': user_name,
+                'email': user_email,
                 'role': membership.role,
                 'is_active': membership.user.is_active,
                 'created_at': membership.user.created_at,
@@ -439,7 +462,17 @@ class UserViewSet(viewsets.GenericViewSet):
                 'store_plan': membership.store.plan,
             })
 
-        return Response({'count': len(results), 'results': results}, status=status.HTTP_200_OK)
+        total_count = len(results)
+        start = (page - 1) * page_size
+        end = start + page_size
+        paginated_results = results[start:end]
+
+        return Response({
+            'count': total_count,
+            'page': page,
+            'page_size': page_size,
+            'results': paginated_results
+        }, status=status.HTTP_200_OK)
 
     def toggle_software_client(self, request, user_id=None):
         """Activa/desactiva la cuenta de un cliente del software."""

@@ -41,6 +41,7 @@ class SaleSearchFilter(SearchFilter):
     partial_update=extend_schema(tags=["Ventas"]),
     destroy=extend_schema(tags=["Ventas"]),
     pending_payments=extend_schema(tags=["Ventas"]),
+    accounts_receivable=extend_schema(tags=["Ventas"]),
 )
 class SaleViewSet(viewsets.ModelViewSet):
     """ViewSet para ventas."""
@@ -49,8 +50,8 @@ class SaleViewSet(viewsets.ModelViewSet):
     serializer_class = SaleSerializer
     queryset = Sale.objects.all()
     filter_backends = [DjangoFilterBackend, SaleSearchFilter, OrderingFilter]
-    filterset_fields = ['store', 'status', 'cash_shift']
-    search_fields = ['id', 'transaction_id', 'items__product__name']
+    filterset_fields = ['store', 'status', 'cash_shift', 'sale_type']
+    search_fields = ['id', 'transaction_id', 'customer__name', 'items__product__name']
     ordering_fields = ['created_at', 'total_amount', 'status']
     ordering = ['-created_at']
     
@@ -73,7 +74,29 @@ class SaleViewSet(viewsets.ModelViewSet):
         sales = self.get_queryset().filter(status__in=['partial'])
         serializer = self.get_serializer(sales, many=True)
         return Response(serializer.data)
-    
+
+    @action(detail=False, methods=['get'], url_path='accounts_receivable')
+    def accounts_receivable(self, request):
+        """Ventas de credito/apartado para la vista de cuentas por cobrar."""
+        include_completed = str(
+            request.query_params.get('include_completed', 'false')
+        ).lower() in ['1', 'true', 'yes', 'si']
+
+        statuses = [Sale.Status.PARTIAL, Sale.Status.PAID] if include_completed else [Sale.Status.PARTIAL]
+        sales = self.get_queryset().filter(
+            sale_type__in=[Sale.SaleType.CREDIT, Sale.SaleType.LAYAWAY],
+            status__in=statuses,
+        )
+        sales = self.filter_queryset(sales)
+
+        page = self.paginate_queryset(sales)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(sales, many=True)
+        return Response(serializer.data)
+
     @transaction.atomic
     def perform_create(self, serializer):
         """Crear venta."""

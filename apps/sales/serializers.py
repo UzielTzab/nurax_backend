@@ -44,20 +44,24 @@ class SaleSerializer(serializers.ModelSerializer):
     items = SaleItemSerializer(many=True, read_only=True)
     payments = SalePaymentSerializer(many=True, read_only=True)
     customer_name = serializers.CharField(source='customer.name', read_only=True, allow_null=True)
+    customer_phone = serializers.SerializerMethodField()
     balance_due = serializers.SerializerMethodField()
     cashier = serializers.SerializerMethodField()
     
     class Meta:
         model = Sale
         fields = [
-            'id', 'store', 'cash_shift', 'cashier', 'customer', 'customer_name',
-            'status', 'total_amount', 'amount_paid', 'amount_tendered', 'change', 'balance_due',
+            'id', 'transaction_id', 'store', 'cash_shift', 'cashier', 'customer', 'customer_name', 'customer_phone',
+            'status', 'sale_type', 'total_amount', 'amount_paid', 'amount_tendered', 'change', 'balance_due',
             'items', 'payments', 'created_at'
         ]
         read_only_fields = ['id', 'created_at', 'balance_due', 'cashier']
     
     def get_balance_due(self, obj):
         return str(obj.balance_due)
+
+    def get_customer_phone(self, obj):
+        return getattr(obj.customer, 'phone', '') if obj.customer else ''
         
     def get_cashier(self, obj):
         if not obj.cash_shift or not obj.cash_shift.opened_by:
@@ -85,9 +89,20 @@ class SaleCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sale
         fields = [
-            'id', 'store', 'cash_shift', 'customer', 'status',
+            'id', 'transaction_id', 'store', 'cash_shift', 'customer', 'status', 'sale_type',
             'total_amount', 'amount_paid', 'amount_tendered', 'change', 'items'
         ]
+        
+    def validate(self, attrs):
+        sale_type = attrs.get('sale_type', Sale.SaleType.CASH)
+        customer = attrs.get('customer')
+        
+        if sale_type in [Sale.SaleType.CREDIT, Sale.SaleType.LAYAWAY]:
+            if not customer or customer.name == 'Venta de Mostrador (General)':
+                raise serializers.ValidationError(
+                    "No se puede otorgar crédito al público general"
+                )
+        return attrs
 
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])
@@ -130,6 +145,16 @@ class SaleCreateSerializer(serializers.ModelSerializer):
 
             request = self.context.get('request') if hasattr(self, 'context') else None
             user = getattr(request, 'user', None)
+
+            # Registrar abono inicial si aplica (en crédito o apartado, o incluso contado)
+            if sale.amount_paid > 0:
+                SalePayment.objects.create(
+                    sale=sale,
+                    cash_shift=sale.cash_shift,
+                    amount=sale.amount_paid,
+                    cashier=user if user and user.is_authenticated else None,
+                    payment_method=SalePayment.PaymentMethod.CASH
+                )
 
             for item_data in items_data:
                 product_id = item_data.get('product')

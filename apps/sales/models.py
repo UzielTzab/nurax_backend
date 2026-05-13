@@ -16,6 +16,11 @@ class Sale(models.Model):
         PARTIAL = 'partial', 'Pago Parcial'
         CANCELLED = 'cancelled', 'Cancelada'
     
+    class SaleType(models.TextChoices):
+        CASH = 'cash', 'Contado'
+        CREDIT = 'credit', 'Fiado/Crédito'
+        LAYAWAY = 'layaway', 'Apartado'
+    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     transaction_id = models.CharField(
         max_length=64,
@@ -50,6 +55,12 @@ class Sale(models.Model):
         choices=Status.choices,
         default=Status.PAID,
         help_text="Estado de la venta"
+    )
+    sale_type = models.CharField(
+        max_length=15,
+        choices=SaleType.choices,
+        default=SaleType.CASH,
+        help_text="Tipo de venta (contado, fiado, apartado)"
     )
     total_amount = models.DecimalField(
         max_digits=12,
@@ -170,6 +181,26 @@ class SalePayment(models.Model):
         validators=[MinValueValidator(Decimal('0.01'))],
         help_text="Monto del abono"
     )
+    
+    class PaymentMethod(models.TextChoices):
+        CASH = 'cash', 'Efectivo'
+        CARD = 'card', 'Tarjeta'
+        TRANSFER = 'transfer', 'Transferencia'
+        OTHER = 'other', 'Otro'
+
+    payment_method = models.CharField(
+        max_length=15,
+        choices=PaymentMethod.choices,
+        default=PaymentMethod.CASH
+    )
+    cashier = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sale_payments_received'
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

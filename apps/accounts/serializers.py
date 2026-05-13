@@ -259,10 +259,19 @@ class StoreEmployeeCreateSerializer(serializers.Serializer):
 class ClientSerializer(serializers.ModelSerializer):
     """Serializer para clientes."""
     
+    debt = serializers.SerializerMethodField()
+    
     class Meta:
         model = Client
-        fields = ['id', 'name', 'credit_limit', 'active', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'credit_limit', 'active', 'created_at', 'updated_at', 'debt']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'debt']
+
+    def get_debt(self, obj):
+        from apps.sales.models import Sale
+        from decimal import Decimal
+        sales = Sale.objects.filter(customer=obj, status=Sale.Status.PARTIAL)
+        total_debt = sum((sale.total_amount - sale.amount_paid) for sale in sales)
+        return str(total_debt)
 
 
 class StoreWithOwnerSerializer(serializers.Serializer):

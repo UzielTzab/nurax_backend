@@ -1,5 +1,5 @@
 """
-Configuración de admin para la app Accounts - ARCHITECTURE_V2.
+Configuración de admin para la app Accounts - Arquitectura Final.
 """
 from django.contrib import admin
 from .models import User, Store, StoreMembership, Client

@@ -1,6 +1,6 @@
 """
 Modelos para la app Products - Catálogo, categorías, proveedores y empaques.
-ARCHITECTURE_V2: Estructura completa de productos multi-tienda.
+Arquitectura Final: Estructura completa de productos multi-tienda.
 """
 from django.db import models
 from django.core.validators import MinValueValidator

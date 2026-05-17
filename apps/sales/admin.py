@@ -1,5 +1,5 @@
 """
-Configuración de admin para la app Sales - ARCHITECTURE_V2.
+Configuración de admin para la app Sales - Arquitectura Final.
 """
 from django.contrib import admin
 from .models import Sale, SaleItem, SalePayment

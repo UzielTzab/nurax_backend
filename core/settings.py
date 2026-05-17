@@ -40,7 +40,7 @@ INSTALLED_APPS = [
     'cloudinary_storage',
     'django_filters',
     'drf_spectacular',
-    # Local apps - ARCHITECTURE_V2 (in apps/)
+    # Local apps - Arquitectura Final
     'apps.accounts.apps.AccountsConfig',
     'apps.products.apps.ProductsConfig',
     'apps.sales.apps.SalesConfig',

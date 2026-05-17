@@ -1,6 +1,6 @@
 """
 Vistas para la app Sales.
-ARCHITECTURE_V2: Ventas, items y pagos.
+Arquitectura Final: Ventas, items y pagos.
 """
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, status

@@ -1,6 +1,6 @@
 """
 Vistas para la app Inventory.
-ARCHITECTURE_V2: Movimientos de inventario (Kárdex).
+Arquitectura Final: Movimientos de inventario (Kárdex).
 """
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated

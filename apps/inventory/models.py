@@ -1,6 +1,6 @@
 """
 Modelos para la app Inventory - Movimientos de inventario (Kárdex).
-ARCHITECTURE_V2: Auditoría completa de movimientos de stock.
+Arquitectura Final: Auditoría completa de movimientos de stock.
 """
 from django.db import models
 import uuid

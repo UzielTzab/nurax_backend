@@ -1,6 +1,6 @@
 """
 Vistas para la app Expenses.
-ARCHITECTURE_V2: Caja, gastos y compras a proveedores.
+Arquitectura Final: Caja, gastos y compras a proveedores.
 """
 from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated

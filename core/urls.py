@@ -10,7 +10,7 @@ from apps.carts.views import pusher_auth
 urlpatterns = [
     path('admin/', admin.site.urls),
     
-    # API v1 - ARCHITECTURE_V2 (apps in apps/ folder)
+    # API v1 - Arquitectura Final
     path('api/v1/accounts/', include('apps.accounts.urls')),
     path('api/v1/stores/<uuid:store_id>/employees/', StoreEmployeesView.as_view(), name='store-employees-exact'),
     path('api/v1/products/', include('apps.products.urls')),

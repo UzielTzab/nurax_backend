@@ -1,6 +1,6 @@
 """
 Modelos para la app Sales - Ventas, items y pagos.
-ARCHITECTURE_V2: Ventas, créditos y control de flujo de caja.
+Arquitectura Final: Ventas, créditos y control de flujo de caja.
 """
 from decimal import Decimal
 from django.db import models

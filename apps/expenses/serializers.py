@@ -1,6 +1,6 @@
 """
 Serializadores para la app Expenses.
-ARCHITECTURE_V2: Caja, gastos y compras a proveedores.
+Arquitectura Final: Caja, gastos y compras a proveedores.
 """
 from rest_framework import serializers
 from .models import (

@@ -1,2 +1,2 @@
 # apps package
-# Contains all Django applications (ARCHITECTURE_V2 structure)
+# Contains all Django applications for the Final Architecture.

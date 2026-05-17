@@ -1,6 +1,6 @@
 """
 Vistas para la app Accounts.
-ARCHITECTURE_V2: Usuarios, tiendas, membresías y clientes.
+Arquitectura Final: Usuarios, tiendas, membresías y clientes.
 """
 from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -770,7 +770,7 @@ class ClientViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Los clientes están asociados a tiendas, no filtrados por usuario."""
-        # En la arquitectura V2, los clientes no tienen referencia a usuario
+        # En la Arquitectura Final, los clientes no tienen referencia a usuario
         # solo a tienda (implícita). Por ahora retornamos todos.
         return Client.objects.all()
 

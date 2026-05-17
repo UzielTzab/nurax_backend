@@ -1,6 +1,6 @@
 """
 Modelos para la app Accounts - Autenticación, usuarios y tiendas.
-ARCHITECTURE_V2: Sistema multi-tienda con membresía y roles.
+Arquitectura Final: Sistema multi-tienda con membresía y roles.
 """
 from django.db import models
 from django.contrib.auth.models import AbstractUser

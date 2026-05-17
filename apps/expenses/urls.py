@@ -1,6 +1,6 @@
 """
 URLs para la app Expenses.
-ARCHITECTURE_V2: Caja, gastos y compras a proveedores.
+Arquitectura Final: Caja, gastos y compras a proveedores.
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter

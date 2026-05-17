@@ -1,6 +1,6 @@
 """
 URLs para la app Inventory.
-ARCHITECTURE_V2: Movimientos de inventario (Kárdex).
+Arquitectura Final: Movimientos de inventario (Kárdex).
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter

@@ -1,6 +1,6 @@
 """
 Serializadores para la app Accounts.
-ARCHITECTURE_V2: Usuarios, tiendas y membresías.
+Arquitectura Final: Usuarios, tiendas y membresías.
 """
 import cloudinary.uploader
 from rest_framework import serializers

@@ -1,6 +1,6 @@
 """
 URLs para la app Sales.
-ARCHITECTURE_V2: Ventas, items y pagos.
+Arquitectura Final: Ventas, items y pagos.
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter

@@ -1,5 +1,5 @@
 """
-Configuración de admin para la app Expenses - ARCHITECTURE_V2.
+Configuración de admin para la app Expenses - Arquitectura Final.
 """
 from django.contrib import admin
 from .models import CashShift, CashMovement, ExpenseCategory, Expense, PurchaseOrder, PurchaseOrderItem

@@ -18,7 +18,7 @@ print(
     f"Name={db_settings.get('NAME')}"
 )
 
-# 0. Crear o obtener Store predeterminado para V2 (multi-tenant)
+# 0. Crear o obtener Store predeterminado para Arquitectura Final.
 store_default, store_created = Store.objects.get_or_create(
     name='Nurax Store Default',
     defaults={'plan': 'enterprise'}

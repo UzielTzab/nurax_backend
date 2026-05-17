@@ -1,6 +1,6 @@
 """
 Modelos para la app Carts - Carrito de compras en tiempo real con WebSockets.
-ARCHITECTURE_V2: Carrito activo y sincronización en tiempo real.
+Arquitectura Final: Carrito activo y sincronización en tiempo real.
 """
 from django.db import models
 import uuid

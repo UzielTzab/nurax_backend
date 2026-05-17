@@ -1,5 +1,5 @@
 """
-Admin para la app Carts - ARCHITECTURE_V2.
+Admin para la app Carts - Arquitectura Final.
 """
 from django.contrib import admin
 from .models import ActiveCart, CartItem

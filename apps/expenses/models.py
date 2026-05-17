@@ -1,6 +1,6 @@
 """
 Modelos para la app Expenses - Caja, gastos y compras a proveedores.
-ARCHITECTURE_V2: Control completo de flujo de efectivo y compras.
+Arquitectura Final: Control completo de flujo de efectivo y compras.
 """
 from django.db import models
 from django.core.validators import MinValueValidator

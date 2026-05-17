@@ -1,6 +1,6 @@
 """
 URLs para la app Accounts.
-ARCHITECTURE_V2: Usuarios, tiendas y membresías.
+Arquitectura Final: Usuarios, tiendas y membresías.
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter

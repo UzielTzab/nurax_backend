@@ -5,6 +5,8 @@ ARCHITECTURE_V2: Auditoría completa de movimientos de stock.
 from django.db import models
 import uuid
 
+from .managers import InventoryMovementManager
+
 
 class InventoryMovement(models.Model):
     """Movimiento de inventario (Kárdex/Auditoría)."""
@@ -44,6 +46,7 @@ class InventoryMovement(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    objects = InventoryMovementManager()
     
     class Meta:
         db_table = 'inventory_movement'

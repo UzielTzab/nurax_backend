@@ -1,29 +1,26 @@
-"""
-Managers y QuerySets personalizados para la app Inventory.
-"""
 from django.db import models
 
 
-class InventoryTransactionQuerySet(models.QuerySet):
-    """QuerySet para transacciones de inventario."""
-    
-    def entries(self) -> "InventoryTransactionQuerySet":
-        """Entradas de inventario."""
-        return self.filter(transaction_type='in')
-    
-    def exits(self) -> "InventoryTransactionQuerySet":
-        """Salidas de inventario."""
-        return self.filter(transaction_type='out')
+class InventoryMovementQuerySet(models.QuerySet):
+    def entries(self) -> "InventoryMovementQuerySet":
+        return self.filter(quantity__gt=0)
+
+    def exits(self) -> "InventoryMovementQuerySet":
+        return self.filter(quantity__lt=0)
+
+    def for_store(self, store) -> "InventoryMovementQuerySet":
+        return self.filter(product__store=store)
 
 
-class InventoryTransactionManager(models.Manager):
-    """Manager para transacciones de inventario."""
-    
-    def get_queryset(self) -> InventoryTransactionQuerySet:
-        return InventoryTransactionQuerySet(self.model, using=self._db)
-    
-    def entries(self) -> InventoryTransactionQuerySet:
+class InventoryMovementManager(models.Manager):
+    def get_queryset(self) -> InventoryMovementQuerySet:
+        return InventoryMovementQuerySet(self.model, using=self._db)
+
+    def entries(self) -> InventoryMovementQuerySet:
         return self.get_queryset().entries()
-    
-    def exits(self) -> InventoryTransactionQuerySet:
+
+    def exits(self) -> InventoryMovementQuerySet:
         return self.get_queryset().exits()
+
+    def for_store(self, store) -> InventoryMovementQuerySet:
+        return self.get_queryset().for_store(store)

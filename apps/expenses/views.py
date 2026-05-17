@@ -26,7 +26,6 @@ from .serializers import (
     update=extend_schema(tags=["Turnos de Caja"]),
     partial_update=extend_schema(tags=["Turnos de Caja"]),
     destroy=extend_schema(tags=["Turnos de Caja"]),
-    open=extend_schema(tags=["Turnos de Caja"]),
     current_open=extend_schema(tags=["Turnos de Caja"]),
     close=extend_schema(tags=["Turnos de Caja"]),
 )
@@ -68,34 +67,6 @@ class CashShiftViewSet(viewsets.ModelViewSet):
 
         serializer.save(opened_by=self.request.user)
 
-    @action(detail=False, methods=['post'], url_path='open')
-    def open(self, request):
-        """Compatibilidad legacy: permite abrir turno vía /cash-shifts/open/."""
-        from apps.accounts.models import StoreMembership
-
-        payload = request.data.copy()
-        store_id = payload.get('store')
-
-        # Para clientes legacy que solo envían starting_cash, inferimos tienda por membresía.
-        if not store_id:
-            membership = StoreMembership.objects.filter(user=request.user).select_related('store').first()
-            if membership:
-                store_id = str(membership.store_id)
-                payload['store'] = store_id
-
-        if not store_id:
-            return Response(
-                {'error': 'store es requerido'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        serializer = self.get_serializer(data=payload)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-    
     @action(detail=False, methods=['get'])
     def current_open(self, request):
         """Turno abierto actual de la tienda."""

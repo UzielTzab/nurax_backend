@@ -7,6 +7,8 @@ from django.core.validators import MinValueValidator
 from decimal import Decimal
 import uuid
 
+from .managers import CashShiftManager, ExpenseManager
+
 
 class CashShift(models.Model):
     """Turno de caja."""
@@ -59,6 +61,7 @@ class CashShift(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    objects = CashShiftManager()
     
     class Meta:
         db_table = 'cash_shift'
@@ -199,6 +202,7 @@ class Expense(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    objects = ExpenseManager()
     
     class Meta:
         db_table = 'expense'

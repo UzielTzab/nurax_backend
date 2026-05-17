@@ -7,6 +7,8 @@ from django.db import models
 from django.core.validators import MinValueValidator
 import uuid
 
+from .managers import SaleManager
+
 
 class Sale(models.Model):
     """Transacción de venta."""
@@ -90,6 +92,7 @@ class Sale(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    objects = SaleManager()
     
     class Meta:
         db_table = 'sale'

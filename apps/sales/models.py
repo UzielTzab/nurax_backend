@@ -3,7 +3,8 @@ Modelos para la app Sales - Ventas, items y pagos.
 Arquitectura Final: Ventas, créditos y control de flujo de caja.
 """
 from decimal import Decimal
-from django.db import models
+from django.db import models, transaction
+from django.db.models import Max
 from django.core.validators import MinValueValidator
 import uuid
 
@@ -24,6 +25,10 @@ class Sale(models.Model):
         LAYAWAY = 'layaway', 'Apartado'
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sale_number = models.PositiveBigIntegerField(
+        db_index=True,
+        help_text="Folio incremental visible de la venta (por tienda)"
+    )
     transaction_id = models.CharField(
         max_length=64,
         blank=True,
@@ -103,11 +108,31 @@ class Sale(models.Model):
             models.Index(fields=['status']),
             models.Index(fields=['created_at']),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['store', 'sale_number'],
+                name='sale_unique_number_per_store',
+            ),
+        ]
     
     @property
     def balance_due(self) -> Decimal:
         """Saldo adeudado."""
         return self.total_amount - self.amount_paid
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.sale_number and self.store_id:
+            from apps.accounts.models import Store
+            with transaction.atomic():
+                Store.objects.select_for_update().filter(pk=self.store_id).first()
+                current_max = (
+                    Sale.objects
+                    .filter(store_id=self.store_id)
+                    .aggregate(max_number=Max('sale_number'))
+                    .get('max_number')
+                ) or 0
+                self.sale_number = int(current_max) + 1
+        super().save(*args, **kwargs)
     
     def __str__(self) -> str:
         return f"Venta {self.id} — ${self.total_amount}"

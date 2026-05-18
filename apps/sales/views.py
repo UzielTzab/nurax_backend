@@ -51,7 +51,7 @@ class SaleViewSet(viewsets.ModelViewSet):
     queryset = Sale.objects.all()
     filter_backends = [DjangoFilterBackend, SaleSearchFilter, OrderingFilter]
     filterset_fields = ['store', 'status', 'cash_shift', 'sale_type']
-    search_fields = ['id', 'transaction_id', 'customer__name', 'items__product__name']
+    search_fields = ['id', 'sale_number', 'transaction_id', 'customer__name', 'items__product__name']
     ordering_fields = ['created_at', 'total_amount', 'status']
     ordering = ['-created_at']
     

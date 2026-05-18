@@ -25,6 +25,7 @@ class SaleModelTest(TestCase):
         self.assertEqual(self.sale.transaction_id, 'TXN-001')
         self.assertEqual(self.sale.status, Sale.Status.PAID)
         self.assertEqual(self.sale.total_amount, Decimal('499.99'))
+        self.assertEqual(self.sale.sale_number, 1)
 
     def test_sale_balance_due_paid(self):
         self.assertEqual(self.sale.balance_due, Decimal('0.00'))
@@ -41,6 +42,7 @@ class SaleModelTest(TestCase):
         )
 
         self.assertEqual(credit_sale.balance_due, Decimal('750.00'))
+        self.assertEqual(credit_sale.sale_number, 2)
 
     def test_sale_str_representation(self):
         self.assertIn('Venta', str(self.sale))

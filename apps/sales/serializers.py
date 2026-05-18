@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Max
 from rest_framework import serializers
 
 from .models import Sale, SaleItem, SalePayment
@@ -44,12 +45,12 @@ class SaleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sale
         fields = [
-            'id', 'transaction_id', 'store', 'cash_shift', 'cashier',
+            'id', 'sale_number', 'transaction_id', 'store', 'cash_shift', 'cashier',
             'customer', 'customer_name', 'customer_phone', 'status',
             'sale_type', 'total_amount', 'amount_paid', 'amount_tendered',
             'change', 'balance_due', 'items', 'payments', 'created_at'
         ]
-        read_only_fields = ['id', 'created_at', 'balance_due', 'cashier']
+        read_only_fields = ['id', 'sale_number', 'created_at', 'balance_due', 'cashier']
 
     def get_balance_due(self, sale):
         return str(sale.balance_due)
@@ -78,11 +79,12 @@ class SaleCreateItemSerializer(serializers.Serializer):
 class SaleCreateSerializer(serializers.ModelSerializer):
     items = SaleCreateItemSerializer(many=True, write_only=True, required=False)
     id = serializers.UUIDField(read_only=True)
+    sale_number = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Sale
         fields = [
-            'id', 'transaction_id', 'store', 'cash_shift', 'customer',
+            'id', 'sale_number', 'transaction_id', 'store', 'cash_shift', 'customer',
             'status', 'sale_type', 'total_amount', 'amount_paid',
             'amount_tendered', 'change', 'items'
         ]
@@ -102,6 +104,7 @@ class SaleCreateSerializer(serializers.ModelSerializer):
         items_data = validated_data.pop('items', [])
 
         with transaction.atomic():
+            validated_data['sale_number'] = self._get_next_sale_number(validated_data.get('store'))
             sale = super().create(validated_data)
             self._set_tendered_amount(sale, validated_data)
 
@@ -125,6 +128,22 @@ class SaleCreateSerializer(serializers.ModelSerializer):
                 self._create_sale_item(sale, item_data, Product, InventoryMovement, authenticated_user)
 
         return sale
+
+    def _get_next_sale_number(self, store):
+        if not store:
+            return 1
+
+        from apps.accounts.models import Store
+        Store.objects.select_for_update().filter(pk=store.pk).first()
+
+        max_sale_number = (
+            Sale.objects
+            .filter(store=store)
+            .aggregate(max_number=Max('sale_number'))
+            .get('max_number')
+        ) or 0
+
+        return int(max_sale_number) + 1
 
     def _set_tendered_amount(self, sale, sale_data):
         amount_tendered = sale_data.get('amount_tendered') or sale_data.get('amount_paid')

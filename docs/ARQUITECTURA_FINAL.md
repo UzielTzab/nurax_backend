@@ -104,7 +104,7 @@ nurax_backend/
 
 - `Sale`
   - Venta por tienda.
-  - Campos: `transaction_id`, `store`, `cash_shift`, `customer`, `status`, `sale_type`, `total_amount`, `amount_paid`, `amount_tendered`, `change`.
+  - Campos: `id` (UUID tecnico), `sale_number` (folio incremental visible por tienda), `transaction_id`, `store`, `cash_shift`, `customer`, `status`, `sale_type`, `total_amount`, `amount_paid`, `amount_tendered`, `change`.
   - Estados: `paid`, `partial`, `cancelled`.
   - Tipos: `cash`, `credit`, `layaway`.
 - `SaleItem`
@@ -147,10 +147,11 @@ El backend usa JWT en cookies HttpOnly:
 ### Venta
 
 1. El frontend crea una venta con `SaleCreateSerializer`.
-2. Se crean `SaleItem`.
-3. Si hay pago inicial, se crea `SalePayment`.
-4. Si el item tiene producto, se descuenta `Product.current_stock`.
-5. Se registra `InventoryMovement`.
+2. El backend asigna `sale_number` incremental por tienda (con control de concurrencia).
+3. Se crean `SaleItem`.
+4. Si hay pago inicial, se crea `SalePayment`.
+5. Si el item tiene producto, se descuenta `Product.current_stock`.
+6. Se registra `InventoryMovement`.
 
 ### Cancelacion de Venta
 

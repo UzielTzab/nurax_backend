@@ -4,7 +4,7 @@ Arquitectura Final: Ventas, items y pagos.
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import SaleViewSet, SaleItemViewSet, SalePaymentViewSet
+from .views import SaleViewSet, SaleItemViewSet, SalePaymentViewSet, DashboardReportView
 
 router = DefaultRouter()
 router.register('sales', SaleViewSet, basename='sale')
@@ -12,5 +12,6 @@ router.register('items', SaleItemViewSet, basename='sale-item')
 router.register('payments', SalePaymentViewSet, basename='payment')
 
 urlpatterns = [
+    path('reports/dashboard/', DashboardReportView.as_view(), name='dashboard-report'),
     path('', include(router.urls)),
 ]

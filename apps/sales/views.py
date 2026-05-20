@@ -8,8 +8,13 @@ from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema_view, extend_schema
 from django.db import transaction
+from django.db.models import Sum, Avg, Count, F
+from django.db.models.functions import TruncDate
+from django.utils import timezone
+from datetime import timedelta
 from .models import Sale, SaleItem, SalePayment
 from .serializers import SaleSerializer, SaleItemSerializer, SalePaymentSerializer, SaleCreateSerializer
 
@@ -213,3 +218,78 @@ class SalePaymentViewSet(viewsets.ModelViewSet):
         
         sale.save()
 
+
+class DashboardReportView(APIView):
+    """
+    Endpoint dedicado para los KPIs del Dashboard.
+    Calcula ventas totales, ticket promedio, cuentas por cobrar y top productos.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        rango = request.query_params.get('rango', 'hoy')
+        
+        # Filtro de tienda
+        from apps.accounts.models import StoreMembership
+        stores = StoreMembership.objects.filter(
+            user=request.user
+        ).values_list('store_id', flat=True)
+
+        sales_qs = Sale.objects.filter(store_id__in=stores).exclude(status=Sale.Status.CANCELLED)
+        
+        # Filtrado por fecha considerando la zona horaria del sistema local
+        now = timezone.localtime(timezone.now())
+        if rango == 'hoy':
+            start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            sales_qs = sales_qs.filter(created_at__gte=start_date)
+        elif rango == 'semana':
+            start_date = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+            sales_qs = sales_qs.filter(created_at__gte=start_date)
+        elif rango == 'mes':
+            start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            sales_qs = sales_qs.filter(created_at__gte=start_date)
+
+        # Agregaciones (Database level)
+        kpis = sales_qs.aggregate(
+            ventas_totales=Sum('total_amount'),
+            ticket_promedio=Avg('total_amount'),
+            ventas_completadas=Count('id')
+        )
+        
+        # Cuentas por cobrar
+        cuentas_qs = sales_qs.filter(sale_type__in=[Sale.SaleType.CREDIT, Sale.SaleType.LAYAWAY], status=Sale.Status.PARTIAL)
+        deuda = cuentas_qs.aggregate(
+            total_deuda=Sum(F('total_amount') - F('amount_paid'))
+        )
+        
+        # Top 3 Productos
+        items_qs = SaleItem.objects.filter(sale__in=sales_qs)
+        top_productos = list(
+            items_qs.values(nombre=F('product__name'))
+            .annotate(cantidad=Sum('quantity'))
+            .order_by('-cantidad')[:3]
+        )
+
+        # Datos para gráfico
+        grafico_qs = sales_qs.annotate(
+            fecha=TruncDate('created_at', tzinfo=timezone.get_current_timezone())
+        ).values('fecha').annotate(
+            total=Sum('total_amount')
+        ).order_by('fecha')
+        
+        ventas_grafico = [
+            {"fecha": item['fecha'].strftime('%Y-%m-%d') if item['fecha'] else "", "total": float(item['total'] or 0)}
+            for item in grafico_qs
+        ]
+
+        return Response({
+            "rango": rango,
+            "kpis": {
+                "ventas_totales": float(kpis['ventas_totales'] or 0),
+                "ticket_promedio": float(kpis['ticket_promedio'] or 0),
+                "cuentas_por_cobrar": float(deuda['total_deuda'] or 0),
+                "ventas_completadas": kpis['ventas_completadas'] or 0
+            },
+            "top_productos": top_productos,
+            "ventas_grafico": ventas_grafico
+        })

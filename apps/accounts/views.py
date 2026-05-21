@@ -65,8 +65,8 @@ class StoreEmployeesView(APIView):
     permission_classes = [IsAuthenticated]
 
     PLAN_LIMITS = {
-        Store.Plan.BASICO: 2,
-        Store.Plan.PRO: 3,
+        Store.Plan.BASICO: 1,
+        Store.Plan.PRO: 2,
     }
 
     def _get_store(self, store_id):
@@ -121,6 +121,8 @@ class StoreEmployeesView(APIView):
             })
 
         plan_limit = self.PLAN_LIMITS.get(store.plan)
+        visible_employees_count = len([e for e in employees if e['membership_role'] != StoreMembership.Role.OWNER])
+        
         payload = {
             'store': {
                 'id': str(store.id),
@@ -128,8 +130,8 @@ class StoreEmployeesView(APIView):
                 'plan': store.plan,
             },
             'plan_limit': plan_limit,
-            'employees_count': len(employees),
-            'can_add_more': plan_limit is None or len(employees) < plan_limit,
+            'employees_count': visible_employees_count,
+            'can_add_more': plan_limit is None or visible_employees_count < plan_limit,
             'employees': StoreEmployeeSerializer(employees, many=True).data,
         }
 
@@ -144,7 +146,7 @@ class StoreEmployeesView(APIView):
         store = Store.objects.select_for_update().get(id=store.id)
 
         plan_limit = self.PLAN_LIMITS.get(store.plan)
-        current_count = StoreMembership.objects.filter(store=store).count()
+        current_count = StoreMembership.objects.filter(store=store).exclude(role=StoreMembership.Role.OWNER).count()
         if plan_limit is not None and current_count >= plan_limit:
             return Response({'error': 'Límite de empleados alcanzado'}, status=status.HTTP_403_FORBIDDEN)
 

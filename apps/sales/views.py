@@ -219,7 +219,7 @@ class SalePaymentViewSet(viewsets.ModelViewSet):
         sale.save()
 
 
-class DashboardReportView(APIView):
+class SummaryReportView(APIView):
     """
     Endpoint dedicado para los KPIs del Dashboard.
     Calcula ventas totales, ticket promedio, cuentas por cobrar y top productos.

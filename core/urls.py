@@ -20,6 +20,7 @@ urlpatterns = [
     path('api/v1/expenses/', include('apps.expenses.urls')),
     path('api/v1/sales/', include('apps.sales.urls')),
     path('api/v1/carts/', include('apps.carts.urls')),
+    path('api/v1/product-intelligence/', include('apps.product_intelligence.urls')),
     path('api/pusher/auth/', pusher_auth),
     
     # Authentication - 🔒 HttpOnly Cookies

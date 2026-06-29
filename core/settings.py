@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'apps.inventory.apps.InventoryConfig',
     'apps.expenses.apps.ExpensesConfig',
     'apps.carts.apps.CartsConfig',
+    'apps.product_intelligence.apps.ProductIntelligenceConfig',
 ]
 
 MIDDLEWARE = [

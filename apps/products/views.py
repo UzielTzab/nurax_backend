@@ -246,6 +246,41 @@ class ProductViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK
         )
 
+    @action(detail=False, methods=['post'], url_path='quick-create')
+    def quick_create(self, request):
+        from apps.accounts.models import StoreMembership, Store
+        from .serializers import ProductQuickCreateSerializer
+
+        serializer = ProductQuickCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        store_id = request.data.get('store')
+        memberships = StoreMembership.objects.filter(user=request.user)
+        is_admin = getattr(request.user, 'role', None) == 'admin'
+
+        if store_id is None:
+            membership = memberships.select_related('store').first()
+            if not membership:
+                raise ValidationError({'store': 'No tienes una tienda asociada para crear productos.'})
+            store = membership.store
+        else:
+            is_member = memberships.filter(store_id=store_id).exists()
+            if not is_admin and not is_member:
+                raise PermissionDenied('No tienes acceso a esta tienda.')
+            try:
+                store = Store.objects.get(id=store_id)
+            except Store.DoesNotExist:
+                raise ValidationError({'store': 'Tienda no encontrada.'})
+
+        product = serializer.save(
+            store=store,
+            status=Product.Status.DRAFT,
+            base_cost=0,
+            current_stock=0
+        )
+        response_serializer = self.get_serializer(product)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
     @action(detail=False, methods=['get'])
     def low_stock(self, request):
         threshold = int(request.query_params.get('threshold', 10))

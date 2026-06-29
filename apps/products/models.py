@@ -90,6 +90,11 @@ class Supplier(models.Model):
 
 class Product(models.Model):
     """Producto del catálogo."""
+
+    class Status(models.TextChoices):
+        DRAFT = 'draft', 'Draft'
+        NEEDS_REVIEW = 'needs_review', 'Needs Review'
+        ACTIVE = 'active', 'Active'
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=250, help_text="Nombre del producto")
@@ -99,6 +104,7 @@ class Product(models.Model):
     base_cost = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))], help_text="Costo base para el dueño")
     sale_price = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))], help_text="Precio de venta al público")
     current_stock = models.PositiveIntegerField(default=0, help_text="Stock disponible actual")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE, help_text="Estado del producto")
     image_url = models.URLField(max_length=500, null=True, blank=True, help_text="URL de la imagen del producto en Cloudinary")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

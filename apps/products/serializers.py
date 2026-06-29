@@ -53,7 +53,7 @@ class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = [
-            'id', 'store', 'name', 'base_cost', 'sale_price', 'current_stock',
+            'id', 'store', 'name', 'base_cost', 'sale_price', 'current_stock', 'status',
             'category', 'category_name', 'supplier', 'supplier_name',
             'image_url', 'image_file', 'remove_image',
             'packagings', 'codes', 'variations', 'created_at', 'updated_at'
@@ -130,4 +130,10 @@ class ProductSimpleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = ['id', 'name', 'base_cost', 'sale_price', 'current_stock']
+        read_only_fields = ['id']
+
+class ProductQuickCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product
+        fields = ['id', 'name', 'sale_price']
         read_only_fields = ['id']

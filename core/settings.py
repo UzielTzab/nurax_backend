@@ -22,7 +22,7 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
 
 def _split_csv_env(name: str, default: str = ''):
     raw = os.getenv(name, default)
-    return [item.strip() for item in raw.split(',') if item.strip()]
+    return [item.strip().rstrip('/') for item in raw.split(',') if item.strip()]
 
 
 INSTALLED_APPS = [

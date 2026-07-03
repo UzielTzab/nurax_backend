@@ -44,7 +44,8 @@ class ProductLookupService:
         # 3. Buscar en OpenFoodFacts
         try:
             url = f"https://world.openfoodfacts.org/api/v0/product/{barcode}.json"
-            response = requests.get(url, timeout=5)
+            headers = {"User-Agent": "NuraxSmartInventory - Web - Version 1.0 - nurax.com"}
+            response = requests.get(url, headers=headers, timeout=5)
             if response.status_code == 200:
                 data = response.json()
                 if data.get("status") == 1:
@@ -54,6 +55,9 @@ class ProductLookupService:
                     category = prod_data.get("categories", "")
                     image_url = prod_data.get("image_url", "")
                     
+                    if not name:
+                        name = brand if brand else "Producto Desconocido"
+                        
                     if name:
                         new_global_product = GlobalProduct.objects.create(
                             barcode=barcode,

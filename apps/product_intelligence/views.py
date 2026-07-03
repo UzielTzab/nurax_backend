@@ -7,6 +7,10 @@ from drf_spectacular.types import OpenApiTypes
 from .serializers import BarcodeLookupRequestSerializer
 from .services import ProductLookupService
 
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+
+@method_decorator(csrf_exempt, name='dispatch')
 class ProductIntelligenceViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 

@@ -58,7 +58,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'image_url', 'image_file', 'remove_image',
             'packagings', 'codes', 'variations', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'image_url', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
         extra_kwargs = {
             'store': {'required': False},
             'category': {'required': False, 'allow_null': True},
@@ -66,6 +66,7 @@ class ProductSerializer(serializers.ModelSerializer):
             'base_cost': {'required': False},
             'sale_price': {'required': False},
             'current_stock': {'required': False},
+            'image_url': {'required': False, 'allow_null': True, 'allow_blank': True},
         }
 
     def _upload_to_cloudinary(self, image_file):
